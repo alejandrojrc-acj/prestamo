@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control de Préstamos — AJRC</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#f8f9fa;--card:#fff;--border:#e2e6ea;--text:#212529;--text2:#6c757d;
+    --blue:#2E75B6;--blue-dark:#1F4E79;--blue-light:#e8f1fb;
+    --green:#198754;--green-light:#d1e7dd;
+    --red:#dc3545;--red-light:#f8d7da;
+    --yellow:#ffc107;--yellow-light:#fff3cd;
+    --orange:#fd7e14;--orange-light:#fde8d0;
+    --purple:#6f42c1;--purple-light:#e8e0f7;
+    --radius:10px;--shadow:0 2px 8px rgba(0,0,0,.08);
+  }
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:14px;min-height:100vh}
+  .app-header{background:var(--blue-dark);color:#fff;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+  .app-header h1{font-size:16px;font-weight:600}
+  .app-header .date{font-size:11px;opacity:.75;margin-top:2px}
+  .header-actions{display:flex;gap:8px}
+  .tabs{background:#fff;border-bottom:2px solid var(--border);display:flex;overflow-x:auto;position:sticky;top:57px;z-index:99}
+  .tab-btn{padding:12px 16px;border:none;background:none;cursor:pointer;font-size:13px;color:var(--text2);white-space:nowrap;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .2s}
+  .tab-btn.active{color:var(--blue);border-bottom-color:var(--blue);font-weight:600}
+  .tab-btn:hover:not(.active){color:var(--text)}
+  .content{padding:16px;max-width:1100px;margin:0 auto}
+  .section{display:none}.section.active{display:block}
+  .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px}
+  .kpi{background:var(--card);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow);border-left:4px solid var(--blue)}
+  .kpi.k-orange{border-left-color:var(--orange)}.kpi.k-green{border-left-color:var(--green)}.kpi.k-red{border-left-color:var(--red)}.kpi.k-purple{border-left-color:var(--purple)}
+  .kpi-label{font-size:11px;color:var(--text2);margin-bottom:6px;font-weight:500;text-transform:uppercase;letter-spacing:.5px}
+  .kpi-val{font-size:20px;font-weight:700}
+  .card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:16px;overflow:hidden}
+  .card-header{padding:12px 16px;background:var(--blue-dark);color:#fff;display:flex;justify-content:space-between;align-items:center;font-weight:600;font-size:13px}
+  .table-wrap{overflow-x:auto}
+  table{width:100%;border-collapse:collapse}
+  th{background:var(--blue);color:#fff;padding:10px 12px;text-align:left;font-size:12px;font-weight:600;white-space:nowrap}
+  td{padding:9px 12px;border-bottom:1px solid var(--border);font-size:12px;vertical-align:middle}
+  tr:last-child td{border-bottom:none}
+  tr:hover td{background:#f8f9fa}
+  .badge{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600}
+  .badge-ok{background:var(--green-light);color:var(--green)}
+  .badge-pend{background:var(--yellow-light);color:#856404}
+  .badge-venc{background:var(--red-light);color:var(--red)}
+  .badge-parcial{background:var(--purple-light);color:var(--purple)}
+  .btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:7px;border:none;cursor:pointer;font-size:12px;font-weight:600;transition:all .15s}
+  .btn-primary{background:var(--blue);color:#fff}.btn-primary:hover{background:var(--blue-dark)}
+  .btn-success{background:var(--green);color:#fff}.btn-success:hover{opacity:.85}
+  .btn-danger{background:var(--red);color:#fff}.btn-danger:hover{opacity:.85}
+  .btn-purple{background:var(--purple);color:#fff}.btn-purple:hover{opacity:.85}
+  .btn-outline{background:#fff;color:var(--text);border:1.5px solid var(--border)}.btn-outline:hover{background:var(--bg)}
+  .btn-sm{padding:4px 10px;font-size:11px}
+  .alert-section{margin-bottom:20px}
+  .alert-section-title{font-size:12px;font-weight:700;padding:8px 14px;border-radius:7px 7px 0 0;display:flex;justify-content:space-between;align-items:center}
+  .alert-item{padding:10px 14px;border-bottom:1px solid rgba(0,0,0,.06);display:flex;justify-content:space-between;align-items:center;gap:12px;background:#fff}
+  .alert-item:last-child{border-bottom:none;border-radius:0 0 7px 7px}
+  .alert-info{flex:1}.alert-name{font-weight:600;font-size:13px}.alert-sub{font-size:11px;color:var(--text2);margin-top:2px}
+  .alert-amount{font-weight:700;font-size:14px;white-space:nowrap}
+  .a-venc .alert-section-title{background:var(--red-light);color:var(--red)}
+  .a-venc .alert-item{border-left:3px solid var(--red)}
+  .a-7d .alert-section-title{background:var(--orange-light);color:var(--orange)}
+  .a-7d .alert-item{border-left:3px solid var(--orange)}
+  .a-30d .alert-section-title{background:var(--yellow-light);color:#856404}
+  .a-30d .alert-item{border-left:3px solid var(--yellow)}
+  .alert-wrap{border-radius:0 0 7px 7px;overflow:hidden;border:1px solid rgba(0,0,0,.08);border-top:none}
+  .empty-alert{padding:14px;text-align:center;color:var(--text2);font-size:12px;background:#fff;border-radius:0 0 7px 7px;border:1px solid rgba(0,0,0,.08);border-top:none}
+  .prog{height:6px;background:#e9ecef;border-radius:3px;overflow:hidden;display:inline-block;width:80px;vertical-align:middle}
+  .prog-fill{height:100%;background:var(--green);border-radius:3px}
+  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center;padding:16px}
+  .modal-overlay.open{display:flex}
+  .modal{background:#fff;border-radius:14px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+  .modal-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+  .modal-header h3{font-size:15px;font-weight:700}
+  .modal-body{padding:20px}
+  .modal-footer{padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px}
+  .form-group{margin-bottom:14px}
+  .form-group label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bottom:5px}
+  .form-group input,.form-group select,.form-group textarea{width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;color:var(--text);background:#fff;transition:border .15s}
+  .form-group input:focus,.form-group select:focus{outline:none;border-color:var(--blue)}
+  .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
+  .toolbar input,.toolbar select{padding:8px 11px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;color:var(--text)}
+  .toolbar input{flex:1;min-width:140px}
+  .data-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;padding:14px;background:var(--blue-light);border-radius:var(--radius)}
+  .data-actions p{width:100%;font-size:12px;color:var(--text2);margin-bottom:4px}
+  .loan-detail-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;padding:14px;border-bottom:1px solid var(--border)}
+  .detail-item label{font-size:10px;color:var(--text2);font-weight:600;text-transform:uppercase}
+  .detail-item .val{font-size:14px;font-weight:700;margin-top:2px}
+  /* Pago parcial box */
+  .pago-info{background:var(--purple-light);border:1.5px solid var(--purple);border-radius:8px;padding:12px 14px;margin-bottom:14px}
+  .pago-info .pi-row{display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px}
+  .pago-info .pi-row:last-child{margin-bottom:0;font-weight:700;font-size:14px;border-top:1px solid rgba(111,66,193,.2);padding-top:6px;margin-top:4px}
+  /* Historial pagos */
+  .historial{background:var(--bg);border-radius:8px;padding:10px 12px;margin-top:10px}
+  .historial-title{font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;margin-bottom:6px}
+  .historial-item{display:flex;justify-content:space-between;align-items:center;font-size:11px;padding:5px 0;border-bottom:1px solid var(--border);gap:8px}
+  .historial-item:last-child{border-bottom:none}
+  .historial-item .hi-info{flex:1}
+  .historial-item .hi-actions{display:flex;gap:4px;flex-shrink:0}
+  .btn-icon{padding:3px 7px;border-radius:5px;border:1px solid var(--border);background:#fff;cursor:pointer;font-size:11px;color:var(--text2)}
+  .btn-icon:hover{background:var(--bg)}
+  /* Edit pago inline */
+  .edit-pago-row{background:var(--blue-light);border-radius:7px;padding:10px 12px;margin:4px 0;display:none}
+  .edit-pago-row.open{display:block}
+  .edit-pago-row .form-row{gap:8px}
+  .edit-pago-row input{padding:6px 9px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;width:100%;color:var(--text)}
+  .pago-mode-toggle{display:flex;gap:6px;margin-bottom:16px}
+  .pago-mode-btn{flex:1;padding:8px;border:1.5px solid var(--border);border-radius:7px;background:#fff;cursor:pointer;font-size:12px;font-weight:600;color:var(--text2);transition:all .15s;text-align:center}
+  .pago-mode-btn.active{border-color:var(--blue);background:var(--blue-light);color:var(--blue)}
+  .fab{position:fixed;bottom:24px;right:24px;width:52px;height:52px;border-radius:50%;background:var(--blue);color:#fff;border:none;font-size:24px;cursor:pointer;box-shadow:0 4px 16px rgba(46,117,182,.5);z-index:150;display:flex;align-items:center;justify-content:center;transition:transform .15s}
+  .fab:hover{transform:scale(1.08)}
+  @media(max-width:600px){.form-row{grid-template-columns:1fr}.kpi-val{font-size:17px}th,td{padding:7px 9px}.content{padding:12px}}
+</style>
+</head>
+<body>
+
+<div class="app-header">
+  <div>
+    <h1>🏦 Control de Préstamos — AJRC</h1>
+    <div class="date" id="fecha-header"></div>
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-outline btn-sm" onclick="exportData()">💾 Exportar</button>
+    <label class="btn btn-outline btn-sm" style="cursor:pointer">📂 Importar<input type="file" accept=".json" onchange="importData(event)" style="display:none"></label>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('alertas',this)">🔔 Alertas</button>
+  <button class="tab-btn" onclick="switchTab('prestamos',this)">📋 Préstamos</button>
+  <button class="tab-btn" onclick="switchTab('cuotas',this)">📅 Cuotas</button>
+  <button class="tab-btn" onclick="switchTab('datos',this)">⚙️ Datos</button>
+</div>
+
+<div class="content">
+  <div class="kpi-grid" id="kpis"></div>
+
+  <!-- ALERTAS -->
+  <div id="sec-alertas" class="section active" ><div id="alertas-content"></div></div>
+
+  <!-- PRÉSTAMOS -->
+  <div id="sec-prestamos" class="section">
+    <div class="toolbar">
+      <input type="text" id="buscar" placeholder="🔍 Buscar solicitante..." oninput="renderPrestamos()">
+      <select id="f-estado" onchange="renderPrestamos()">
+        <option value="">Todos los estados</option>
+        <option value="activo">Activo</option>
+        <option value="vencido">Vencido</option>
+        <option value="completado">Completado</option>
+      </select>
+    </div>
+    <div class="card">
+      <div class="card-header">📋 Préstamos registrados
+        <button class="btn btn-success btn-sm" onclick="abrirNuevoPrestamo()">+ Nuevo</button>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>ID</th><th>Solicitante</th><th>Capital</th><th>Total</th><th>Cobrado</th><th>Saldo por cobrar</th><th>Avance</th><th>Estado</th><th></th></tr></thead>
+        <tbody id="tbody-prestamos"></tbody>
+      </table></div>
+    </div>
+  </div>
+
+  <!-- CUOTAS -->
+  <div id="sec-cuotas" class="section">
+    <div class="toolbar">
+      <select id="f-prestamo" onchange="renderCuotas()">
+        <option value="">Todos los préstamos</option>
+      </select>
+      <select id="f-cuota-estado" onchange="renderCuotas()">
+        <option value="">Todos los estados</option>
+        <option value="Pendiente">Pendiente</option>
+        <option value="Parcial">Pago parcial</option>
+        <option value="Pagado">Pagado</option>
+        <option value="vencido">Vencido</option>
+      </select>
+    </div>
+    <div class="card">
+      <div class="card-header">📅 Detalle de cuotas</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Préstamo</th><th>Solicitante</th><th>N°</th><th>Vencimiento</th><th>Monto original</th><th>Pagado</th><th>Saldo</th><th>Estado</th><th>Días</th><th></th></tr></thead>
+        <tbody id="tbody-cuotas"></tbody>
+      </table></div>
+    </div>
+  </div>
+
+  <!-- DATOS -->
+  <div id="sec-datos" class="section">
+    <div class="data-actions">
+      <p><strong>💾 Exportar / Importar</strong> — Respaldo en archivo JSON para mover entre dispositivos.</p>
+      <button class="btn btn-primary" onclick="exportData()">💾 Exportar JSON</button>
+      <label class="btn btn-outline" style="cursor:pointer">📂 Importar JSON<input type="file" accept=".json" onchange="importData(event)" style="display:none"></label>
+      <button class="btn btn-danger" onclick="limpiarDatos()">🗑️ Limpiar todo</button>
+    </div>
+    <div class="card">
+      <div class="card-header">📊 Resumen</div>
+      <div style="padding:16px" id="resumen-datos"></div>
+    </div>
+  </div>
+</div>
+
+<button class="fab" onclick="abrirNuevoPrestamo()">+</button>
+
+<!-- MODAL NUEVO PRÉSTAMO -->
+<div class="modal-overlay" id="modal-nuevo">
+  <div class="modal">
+    <div class="modal-header"><h3>➕ Nuevo préstamo</h3><button class="btn btn-outline btn-sm" onclick="cerrarModal('nuevo')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label>Solicitante *</label><input id="n-nombre" placeholder="Nombre completo"></div>
+      <div class="form-row">
+        <div class="form-group"><label>Capital prestado *</label><input id="n-capital" type="number" placeholder="1000000"></div>
+        <div class="form-group"><label>Plazo (meses) *</label><input id="n-plazo" type="number" placeholder="3" min="1"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Tasa mensual (%)</label><input id="n-tasa" type="number" placeholder="0" step="0.1" min="0"></div>
+        <div class="form-group"><label>Fecha del préstamo *</label><input id="n-fecha" type="date"></div>
+      </div>
+      <div class="form-group"><label>Notas</label><input id="n-nota" placeholder="Opcional"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="cerrarModal('nuevo')">Cancelar</button>
+      <button class="btn btn-primary" onclick="crearPrestamo()">Crear préstamo</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL REGISTRAR PAGO -->
+<div class="modal-overlay" id="modal-pago">
+  <div class="modal">
+    <div class="modal-header"><h3 id="pago-titulo">💳 Registrar pago</h3><button class="btn btn-outline btn-sm" onclick="cerrarModal('pago')">✕</button></div>
+    <div class="modal-body">
+      <!-- Info cuota -->
+      <div id="pago-cuota-info" class="pago-info"></div>
+
+      <!-- Modo: completo o parcial -->
+      <div class="pago-mode-toggle">
+        <div class="pago-mode-btn active" id="mode-btn-total" onclick="setPagoMode('total')">✅ Pago completo</div>
+        <div class="pago-mode-btn" id="mode-btn-parcial" onclick="setPagoMode('parcial')">💜 Pago parcial</div>
+      </div>
+
+      <!-- Monto pagado (solo en parcial) -->
+      <div id="pago-monto-group" class="form-group" style="display:none">
+        <label>Monto pagado ahora *</label>
+        <input id="p-monto-pagado" type="number" placeholder="0" oninput="actualizarSaldo()">
+        <div id="saldo-preview" style="margin-top:6px;font-size:12px;color:var(--purple);font-weight:600"></div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group"><label>Fecha de pago *</label><input id="p-fecha-pago" type="date"></div>
+        <div class="form-group"><label>Fecha vencimiento saldo</label><input id="p-fecha-venc" type="date"></div>
+      </div>
+      <div class="form-group"><label>Comentario</label><input id="p-comentario" placeholder="Ej: Transferencia #123, efectivo..."></div>
+
+      <!-- Historial de pagos parciales previos -->
+      <div id="historial-pagos"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="cerrarModal('pago')">Cancelar</button>
+      <button class="btn btn-primary" id="btn-guardar-pago" onclick="guardarPago()">Guardar pago</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL EDITAR VENCIMIENTO -->
+<div class="modal-overlay" id="modal-venc">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header">
+      <h3>📅 Modificar fecha de vencimiento</h3>
+      <button class="btn btn-outline btn-sm" onclick="cerrarModal('venc')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="venc-cuota-info" style="background:var(--blue-light);padding:10px 12px;border-radius:7px;margin-bottom:16px;font-size:13px"></div>
+      <div class="form-group">
+        <label>Fecha de vencimiento actual</label>
+        <input id="venc-fecha-actual" type="date" disabled style="background:var(--bg);color:var(--text2)">
+      </div>
+      <div class="form-group">
+        <label>Nueva fecha de vencimiento *</label>
+        <input id="venc-fecha-nueva" type="date">
+      </div>
+      <div class="form-group">
+        <label>Motivo del cambio</label>
+        <input id="venc-motivo" placeholder="Ej: Acuerdo con deudor, refinanciamiento...">
+      </div>
+      <div id="venc-aviso" style="font-size:12px;color:var(--text2);margin-top:4px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="cerrarModal('venc')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarVencimiento()">Guardar fecha</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL DETALLE PRÉSTAMO -->
+<div class="modal-overlay" id="modal-detalle">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-header"><h3 id="detalle-titulo">Detalle</h3><button class="btn btn-outline btn-sm" onclick="cerrarModal('detalle')">✕</button></div>
+    <div id="detalle-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" id="btn-eliminar-prestamo">🗑 Eliminar</button>
+      <button class="btn btn-outline" onclick="cerrarModal('detalle')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Utils ─────────────────────────────────────────────────────────────────────
+const today   = () => { const d=new Date(); d.setHours(0,0,0,0); return d; };
+const nowT    = () => today().getTime();
+const fmtDate = d => d ? new Date(d).toLocaleDateString('es-CL') : '—';
+const fmtMoney= n => n==null ? '—' : '$'+Math.round(n).toLocaleString('es-CL');
+const toInput = d => { if(!d) return ''; return new Date(d).toISOString().split('T')[0]; };
+const parseD  = s => { if(!s) return null; const d=new Date(s); d.setHours(0,0,0,0); return d.getTime(); };
+const excelD  = n => { const d=new Date(1899,11,30); d.setDate(d.getDate()+n); d.setHours(0,0,0,0); return d.getTime(); };
+const diffDays= (a,b) => Math.round((a-b)/86400000);
+
+// ── Estado ────────────────────────────────────────────────────────────────────
+let loans = [];
+let editingPago = null; // {pid, ci}
+let pagoMode = 'total';
+const STORAGE_KEY = 'ajrc_prestamos_v3';
+
+// ── Lógica cuotas ─────────────────────────────────────────────────────────────
+// Cada cuota tiene:
+//   monto        = monto original
+//   saldo        = saldo pendiente (monto - suma de pagos parciales)
+//   estado       = 'Pendiente' | 'Parcial' | 'Pagado'
+//   pagos        = [{fecha, monto, comentario}]  historial de pagos
+//   venc         = fecha vencimiento (se puede actualizar)
+//   fechaPago    = fecha del último/único pago completo
+
+function montoPagado(c) {
+  return (c.pagos||[]).reduce((s,p)=>s+p.monto, 0);
+}
+function saldoCuota(c) {
+  return Math.max(0, c.monto - montoPagado(c));
+}
+function cobrado(p)   { return p.cuotas.reduce((s,c)=>s+montoPagado(c), 0); }
+function pendiente(p) { return p.cuotas.reduce((s,c)=>s+saldoCuota(c), 0); }
+
+function isVencida(c) {
+  return c.estado!=='Pagado' && c.venc && c.venc < nowT();
+}
+function getEstado(p) {
+  const pend = p.cuotas.filter(c=>c.estado!=='Pagado');
+  if (!pend.length) return 'completado';
+  if (pend.some(c=>isVencida(c))) return 'vencido';
+  return 'activo';
+}
+function diasLabel(c) {
+  if (c.estado==='Pagado') return '—';
+  if (!c.venc) return '—';
+  const d = diffDays(c.venc, nowT());
+  return d<0 ? `${Math.abs(d)}d vencido` : (d===0?'Hoy':`+${d}d`);
+}
+
+function badgeEstado(c) {
+  if (c.estado==='Pagado')  return '<span class="badge badge-ok">Pagado</span>';
+  if (c.estado==='Parcial') return '<span class="badge badge-parcial">Parcial</span>';
+  if (isVencida(c))         return '<span class="badge badge-venc">Vencido</span>';
+  return '<span class="badge badge-pend">Pendiente</span>';
+}
+
+// ── Datos ─────────────────────────────────────────────────────────────────────
+function loadData() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) { loans = JSON.parse(raw); migrarDatos(); return; }
+  } catch(e) {}
+  loans = [
+    {id:'P001',sol:'Carla Finol',cap:1000000,plazo:3,tasa:0.08,fecha:excelD(46142),total:1240000,nota:'',
+     cuotas:[
+       {n:1,venc:excelD(46172),monto:413333,saldo:0,estado:'Pagado',pagos:[{fecha:excelD(46188),monto:413333,comentario:''}],fechaPago:excelD(46188)},
+       {n:2,venc:excelD(46203),monto:413333,saldo:413333,estado:'Pendiente',pagos:[],fechaPago:null},
+       {n:3,venc:excelD(46233),monto:413333,saldo:413333,estado:'Pendiente',pagos:[],fechaPago:null}
+     ]},
+    {id:'P002',sol:'Carla Finol (Compras)',cap:271970,plazo:3,tasa:0,fecha:excelD(46172),total:271970,nota:'',
+     cuotas:[
+       {n:1,venc:excelD(46172),monto:90657,saldo:0,estado:'Pagado',pagos:[{fecha:excelD(46172),monto:90657,comentario:''}],fechaPago:excelD(46172)},
+       {n:2,venc:excelD(46203),monto:90657,saldo:90657,estado:'Pendiente',pagos:[],fechaPago:null},
+       {n:3,venc:excelD(46233),monto:90657,saldo:90657,estado:'Pendiente',pagos:[],fechaPago:null}
+     ]},
+    {id:'P003',sol:'Beto Martinez',cap:2628000,plazo:6,tasa:0,fecha:excelD(46083),total:2628000,nota:'',
+     cuotas:[
+       {n:1,venc:excelD(46083),monto:438000,saldo:0,estado:'Pagado',pagos:[{fecha:excelD(46083),monto:438000,comentario:''}],fechaPago:excelD(46083)},
+       {n:2,venc:excelD(46113),monto:438000,saldo:0,estado:'Pagado',pagos:[{fecha:excelD(46113),monto:438000,comentario:''}],fechaPago:excelD(46113)},
+       {n:3,venc:excelD(46143),monto:438000,saldo:0,estado:'Pagado',pagos:[{fecha:excelD(46143),monto:438000,comentario:''}],fechaPago:excelD(46143)},
+       {n:4,venc:excelD(46174),monto:438000,saldo:0,estado:'Pagado',pagos:[{fecha:excelD(46174),monto:438000,comentario:''}],fechaPago:excelD(46174)},
+       {n:5,venc:excelD(46204),monto:438000,saldo:438000,estado:'Pendiente',pagos:[],fechaPago:null},
+       {n:6,venc:excelD(46234),monto:438000,saldo:438000,estado:'Pendiente',pagos:[],fechaPago:null}
+     ]},
+    {id:'P004',sol:'Beto Martinez (Int.)',cap:1000000,plazo:3,tasa:0.10,fecha:excelD(46150),total:1300000,nota:'Intereses',
+     cuotas:[
+       {n:1,venc:excelD(46180),monto:100000,saldo:100000,estado:'Pendiente',pagos:[],fechaPago:null},
+       {n:2,venc:excelD(46210),monto:100000,saldo:100000,estado:'Pendiente',pagos:[],fechaPago:null},
+       {n:3,venc:excelD(46240),monto:100000,saldo:100000,estado:'Pendiente',pagos:[],fechaPago:null}
+     ]},
+    {id:'P005',sol:'James Barbero',cap:1000000,plazo:3,tasa:0.12,fecha:excelD(46162),total:1360000,nota:'',
+     cuotas:[
+       {n:1,venc:excelD(46192),monto:120000,saldo:0,estado:'Pagado',pagos:[{fecha:excelD(46188),monto:120000,comentario:''}],fechaPago:excelD(46188)},
+       {n:2,venc:excelD(46222),monto:120000,saldo:120000,estado:'Pendiente',pagos:[],fechaPago:null},
+       {n:3,venc:excelD(46252),monto:120000,saldo:120000,estado:'Pendiente',pagos:[],fechaPago:null}
+     ]},
+    {id:'P006',sol:'Carlos Finol',cap:1500000,plazo:18,tasa:0.005,fecha:excelD(46168),total:1635000,nota:'',
+     cuotas:Array.from({length:18},(_,i)=>({n:i+1,venc:excelD(46198+30*i),monto:i<17?128000:136984,saldo:i<17?128000:136984,estado:'Pendiente',pagos:[],fechaPago:null}))}
+  ];
+  saveData();
+}
+
+function migrarDatos() {
+  // Migra cuotas del formato anterior (sin pagos[]) al nuevo
+  loans.forEach(p => {
+    p.cuotas.forEach(c => {
+      if (!c.pagos) {
+        c.pagos = c.estado==='Pagado' ? [{fecha:c.fechaPago||c.venc, monto:c.monto, comentario:''}] : [];
+      }
+      if (c.saldo === undefined) {
+        c.saldo = saldoCuota(c);
+      }
+    });
+  });
+  saveData();
+}
+
+function saveData() {
+  // Sync saldo antes de guardar
+  loans.forEach(p => p.cuotas.forEach(c => { c.saldo = saldoCuota(c); }));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(loans));
+}
+
+// ── Render KPIs ───────────────────────────────────────────────────────────────
+function renderKPIs() {
+  const cap    = loans.reduce((s,p)=>s+p.cap,0);
+  const pend   = loans.reduce((s,p)=>s+pendiente(p),0);
+  const cob    = loans.reduce((s,p)=>s+cobrado(p),0);
+  const cvenc  = loans.reduce((s,p)=>s+p.cuotas.filter(c=>isVencida(c)).length,0);
+  const cparcial = loans.reduce((s,p)=>s+p.cuotas.filter(c=>c.estado==='Parcial').length,0);
+  document.getElementById('kpis').innerHTML = `
+    <div class="kpi"><div class="kpi-label">💰 Capital total</div><div class="kpi-val">${fmtMoney(cap)}</div></div>
+    <div class="kpi k-green"><div class="kpi-label">✅ Total cobrado</div><div class="kpi-val">${fmtMoney(cob)}</div></div>
+    <div class="kpi k-orange"><div class="kpi-label">⏳ Por cobrar</div><div class="kpi-val">${fmtMoney(pend)}</div></div>
+    <div class="kpi k-red"><div class="kpi-label">⛔ Vencidas</div><div class="kpi-val">${cvenc}</div></div>
+    <div class="kpi k-purple"><div class="kpi-label">💜 Parciales</div><div class="kpi-val">${cparcial}</div></div>
+  `;
+}
+
+// ── Render Alertas ────────────────────────────────────────────────────────────
+function renderAlertas() {
+  const nt = nowT();
+  const grupos = [
+    {title:'⛔ Cuotas vencidas',    cls:'a-venc', fn:c=>c.venc&&c.venc<nt &&c.estado!=='Pagado'},
+    {title:'⏰ Vence en 7 días',    cls:'a-7d',   fn:c=>c.venc&&c.venc>=nt&&c.venc<=nt+7*86400000&&c.estado!=='Pagado'},
+    {title:'📅 Vence en 30 días',   cls:'a-30d',  fn:c=>c.venc&&c.venc>nt+7*86400000&&c.venc<=nt+30*86400000&&c.estado!=='Pagado'},
+  ];
+  let html='', total=0;
+  grupos.forEach(({title,cls,fn})=>{
+    const items=[];
+    loans.forEach(p=>p.cuotas.forEach((c,ci)=>{ if(fn(c)) items.push({p,c,ci}); }));
+    total+=items.length;
+    html+=`<div class="alert-section ${cls}">
+      <div class="alert-section-title">${title}<span>${items.length} registros</span></div>
+      ${items.length?`<div class="alert-wrap">`+items.map(({p,c,ci})=>`
+        <div class="alert-item">
+          <div class="alert-info">
+            <div class="alert-name">${p.sol} ${c.estado==='Parcial'?'<span class="badge badge-parcial" style="font-size:10px">Parcial</span>':''}</div>
+            <div class="alert-sub">Cuota ${c.n}/${p.plazo} · Vence: ${fmtDate(c.venc)} · ${diasLabel(c)}${c.estado==='Parcial'?` · Saldo: ${fmtMoney(saldoCuota(c))}`:''}
+            </div>
+          </div>
+          <div class="alert-amount">${fmtMoney(saldoCuota(c))}</div>
+          <button class="btn btn-primary btn-sm" onclick="abrirPago('${p.id}',${ci})">💳 Pagar</button>
+          <button class="btn btn-outline btn-sm" onclick="abrirEditVenc('${p.id}',${ci})" title="Modificar fecha vencimiento">📅</button>
+        </div>`).join('')+`</div>`
+      :`<div class="empty-alert">✅ Sin registros</div>`}
+    </div>`;
+  });
+  if(!total) html='<div style="text-align:center;padding:40px;color:var(--text2)"><div style="font-size:40px">✅</div><div style="margin-top:8px;font-weight:600">Sin alertas pendientes</div></div>';
+  document.getElementById('alertas-content').innerHTML=html;
+}
+
+// ── Render Préstamos ──────────────────────────────────────────────────────────
+function renderPrestamos() {
+  const q  = (document.getElementById('buscar').value||'').toLowerCase();
+  const ef = document.getElementById('f-estado').value;
+  const rows = loans.filter(p=>{
+    if(q&&!p.sol.toLowerCase().includes(q)) return false;
+    if(ef&&getEstado(p)!==ef) return false;
+    return true;
+  });
+  const eBadge={completado:'<span class="badge badge-ok">Completado</span>',vencido:'<span class="badge badge-venc">Vencido</span>',activo:'<span class="badge badge-pend">Activo</span>'};
+  document.getElementById('tbody-prestamos').innerHTML=rows.map(p=>{
+    const cob=cobrado(p), saldo=p.total-cob, pct=Math.round(cob/p.total*100);
+    return`<tr>
+      <td><b>${p.id}</b></td>
+      <td>${p.sol}${p.nota?`<br><small style="color:var(--text2)">${p.nota}</small>`:''}</td>
+      <td>${fmtMoney(p.cap)}</td>
+      <td>${fmtMoney(p.total)}</td>
+      <td style="color:var(--green);font-weight:600">${fmtMoney(cob)}</td>
+      <td style="color:${saldo>0?'var(--orange)':'var(--green)'};font-weight:600">${fmtMoney(saldo)}</td>
+      <td><div class="prog"><div class="prog-fill" style="width:${pct}%"></div></div><span style="margin-left:6px;font-size:11px;color:var(--text2)">${pct}%</span></td>
+      <td>${eBadge[getEstado(p)]}</td>
+      <td><button class="btn btn-outline btn-sm" onclick="verDetalle('${p.id}')">Ver →</button></td>
+    </tr>`;
+  }).join('')||'<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--text2)">Sin resultados</td></tr>';
+}
+
+// ── Render Cuotas ─────────────────────────────────────────────────────────────
+function renderCuotas() {
+  const fp=document.getElementById('f-prestamo').value;
+  const fe=document.getElementById('f-cuota-estado').value;
+  const rows=[];
+  loans.forEach(p=>{
+    if(fp&&p.id!==fp) return;
+    p.cuotas.forEach((c,ci)=>{
+      const venc=isVencida(c);
+      if(fe==='Pendiente'&&(c.estado!=='Pendiente'||venc)) return;
+      if(fe==='Pagado'&&c.estado!=='Pagado') return;
+      if(fe==='Parcial'&&c.estado!=='Parcial') return;
+      if(fe==='vencido'&&!venc) return;
+      rows.push({p,c,ci});
+    });
+  });
+  document.getElementById('tbody-cuotas').innerHTML=rows.map(({p,c,ci})=>`<tr>
+    <td><b>${p.id}</b></td><td>${p.sol}</td>
+    <td style="text-align:center">${c.n}</td>
+    <td>${fmtDate(c.venc)}</td>
+    <td>${fmtMoney(c.monto)}</td>
+    <td style="color:var(--green);font-weight:600">${fmtMoney(montoPagado(c))}</td>
+    <td style="color:${saldoCuota(c)>0?'var(--orange)':'var(--green)'};font-weight:600">${fmtMoney(saldoCuota(c))}</td>
+    <td>${badgeEstado(c)}</td>
+    <td style="font-size:11px;color:${isVencida(c)?'var(--red)':'var(--text2)'}">${diasLabel(c)}</td>
+    <td style="white-space:nowrap">
+      <button class="btn btn-outline btn-sm" onclick="abrirPago('${p.id}',${ci})" title="Registrar pago">💳</button>
+      <button class="btn btn-outline btn-sm" onclick="abrirEditVenc('${p.id}',${ci})" title="Modificar fecha vencimiento" style="margin-left:3px">📅</button>
+    </td>
+  </tr>`).join('')||'<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--text2)">Sin resultados</td></tr>';
+}
+
+// ── Modal Pago ────────────────────────────────────────────────────────────────
+let _pagoP=null, _pagoC=null, _pagoCi=null;
+
+function abrirPago(pid, ci) {
+  const p=loans.find(x=>x.id===pid);
+  const c=p.cuotas[ci];
+  _pagoP=p; _pagoC=c; _pagoCi=ci;
+  editingPago={pid,ci};
+
+  document.getElementById('pago-titulo').textContent=`💳 Registrar pago — ${p.sol}`;
+
+  // Info cuota
+  const sal=saldoCuota(c);
+  const pagAcum=montoPagado(c);
+  document.getElementById('pago-cuota-info').innerHTML=`
+    <div class="pi-row"><span>Cuota ${c.n} de ${p.plazo} · Vence ${fmtDate(c.venc)}</span>${badgeEstado(c)}</div>
+    <div class="pi-row"><span>Monto original</span><span>${fmtMoney(c.monto)}</span></div>
+    ${pagAcum>0?`<div class="pi-row"><span>Ya pagado</span><span style="color:var(--green)">${fmtMoney(pagAcum)}</span></div>`:''}
+    <div class="pi-row"><span>Saldo pendiente</span><span style="color:var(--purple)">${fmtMoney(sal)}</span></div>
+  `;
+
+  // Defaults
+  setPagoMode('total');
+  document.getElementById('p-fecha-pago').value=toInput(Date.now());
+  document.getElementById('p-fecha-venc').value=toInput(c.venc);
+  document.getElementById('p-monto-pagado').value='';
+  document.getElementById('p-comentario').value='';
+  document.getElementById('saldo-preview').textContent='';
+
+  // Historial
+  renderHistorialPagos(c, pid, ci);
+
+  abrirModal('pago');
+  setTimeout(()=>document.getElementById('p-fecha-pago').focus(),100);
+}
+
+function renderHistorialPagos(c, pid, ci) {
+  if(!c.pagos||c.pagos.length===0){
+    document.getElementById('historial-pagos').innerHTML='';
+    return;
+  }
+  document.getElementById('historial-pagos').innerHTML=`
+    <div class="historial">
+      <div class="historial-title">Historial de pagos (${c.pagos.length}) — toca ✏️ para corregir</div>
+      ${c.pagos.map((pg,pi)=>`
+        <div id="hi-${pi}">
+          <div class="historial-item">
+            <div class="hi-info">
+              <span style="font-weight:600;color:var(--green)">${fmtMoney(pg.monto)}</span>
+              <span style="color:var(--text2);margin-left:6px">${fmtDate(pg.fecha)}${pg.comentario?' · '+pg.comentario:''}</span>
+            </div>
+            <div class="hi-actions">
+              <button class="btn-icon" title="Editar" onclick="toggleEditPago(${pi})">✏️</button>
+              <button class="btn-icon" title="Eliminar" onclick="eliminarPago('${pid}',${ci},${pi})" style="color:var(--red)">🗑</button>
+            </div>
+          </div>
+          <div class="edit-pago-row" id="edit-row-${pi}">
+            <div class="form-row" style="margin-bottom:8px">
+              <div>
+                <label style="font-size:11px;font-weight:600;color:var(--text2);display:block;margin-bottom:3px">Monto</label>
+                <input type="number" id="ep-monto-${pi}" value="${pg.monto}">
+              </div>
+              <div>
+                <label style="font-size:11px;font-weight:600;color:var(--text2);display:block;margin-bottom:3px">Fecha</label>
+                <input type="date" id="ep-fecha-${pi}" value="${toInput(pg.fecha)}">
+              </div>
+            </div>
+            <div style="margin-bottom:8px">
+              <label style="font-size:11px;font-weight:600;color:var(--text2);display:block;margin-bottom:3px">Comentario</label>
+              <input type="text" id="ep-comentario-${pi}" value="${pg.comentario||''}" placeholder="Opcional">
+            </div>
+            <div style="display:flex;gap:6px;justify-content:flex-end">
+              <button class="btn btn-outline btn-sm" onclick="toggleEditPago(${pi})">Cancelar</button>
+              <button class="btn btn-primary btn-sm" onclick="guardarEditPago('${pid}',${ci},${pi})">Guardar corrección</button>
+            </div>
+          </div>
+        </div>`).join('')}
+    </div>`;
+}
+
+function toggleEditPago(pi) {
+  const row = document.getElementById(`edit-row-${pi}`);
+  // Cerrar todos los demás
+  document.querySelectorAll('.edit-pago-row.open').forEach(r => {
+    if(r.id !== `edit-row-${pi}`) r.classList.remove('open');
+  });
+  row.classList.toggle('open');
+}
+
+function guardarEditPago(pid, ci, pi) {
+  const nuevoMonto = parseFloat(document.getElementById(`ep-monto-${pi}`).value);
+  const nuevaFecha = document.getElementById(`ep-fecha-${pi}`).value;
+  const nuevoComent = document.getElementById(`ep-comentario-${pi}`).value.trim();
+
+  if(isNaN(nuevoMonto)||nuevoMonto<=0){alert('El monto debe ser mayor a 0');return;}
+  if(!nuevaFecha){alert('Ingresa la fecha');return;}
+
+  const p = loans.find(x=>x.id===pid);
+  const c = p.cuotas[ci];
+
+  // Verificar que la suma de todos los pagos (con el editado) no supere el monto original
+  const otrosPagos = c.pagos.reduce((s,pg,idx)=>idx===pi?s:s+pg.monto, 0);
+  if(nuevoMonto + otrosPagos > c.monto){
+    if(!confirm(`La suma de pagos (${fmtMoney(nuevoMonto+otrosPagos)}) supera el monto original (${fmtMoney(c.monto)}). ¿Continuar de todas formas?`)) return;
+  }
+
+  c.pagos[pi].monto = nuevoMonto;
+  c.pagos[pi].fecha = parseD(nuevaFecha);
+  c.pagos[pi].comentario = nuevoComent;
+
+  // Recalcular estado
+  recalcularEstadoCuota(c);
+  saveData();
+
+  // Refrescar el modal con los datos actualizados
+  const {pid:_pid, ci:_ci} = editingPago;
+  // Actualizar info cuota en modal
+  const sal = saldoCuota(c);
+  const pagAcum = montoPagado(c);
+  document.getElementById('pago-cuota-info').innerHTML=`
+    <div class="pi-row"><span>Cuota ${c.n} de ${_pagoP.plazo} · Vence ${fmtDate(c.venc)}</span>${badgeEstado(c)}</div>
+    <div class="pi-row"><span>Monto original</span><span>${fmtMoney(c.monto)}</span></div>
+    ${pagAcum>0?`<div class="pi-row"><span>Ya pagado</span><span style="color:var(--green)">${fmtMoney(pagAcum)}</span></div>`:''}
+    <div class="pi-row"><span>Saldo pendiente</span><span style="color:var(--purple)">${fmtMoney(sal)}</span></div>
+  `;
+  renderHistorialPagos(c, pid, ci);
+  renderAll();
+}
+
+function eliminarPago(pid, ci, pi) {
+  const p = loans.find(x=>x.id===pid);
+  const c = p.cuotas[ci];
+  const pg = c.pagos[pi];
+  if(!confirm(`¿Eliminar el pago de ${fmtMoney(pg.monto)} del ${fmtDate(pg.fecha)}?\nSe recalculará el saldo de la cuota.`)) return;
+
+  c.pagos.splice(pi, 1);
+  recalcularEstadoCuota(c);
+  saveData();
+
+  // Refrescar modal
+  const sal = saldoCuota(c);
+  const pagAcum = montoPagado(c);
+  document.getElementById('pago-cuota-info').innerHTML=`
+    <div class="pi-row"><span>Cuota ${c.n} de ${_pagoP.plazo} · Vence ${fmtDate(c.venc)}</span>${badgeEstado(c)}</div>
+    <div class="pi-row"><span>Monto original</span><span>${fmtMoney(c.monto)}</span></div>
+    ${pagAcum>0?`<div class="pi-row"><span>Ya pagado</span><span style="color:var(--green)">${fmtMoney(pagAcum)}</span></div>`:''}
+    <div class="pi-row"><span>Saldo pendiente</span><span style="color:var(--purple)">${fmtMoney(sal)}</span></div>
+  `;
+  renderHistorialPagos(c, pid, ci);
+  renderAll();
+}
+
+function recalcularEstadoCuota(c) {
+  const sal = saldoCuota(c);
+  if(sal <= 0){
+    c.estado = 'Pagado';
+    // Fecha del último pago
+    if(c.pagos.length > 0){
+      c.fechaPago = c.pagos[c.pagos.length-1].fecha;
+    }
+  } else if(c.pagos.length > 0){
+    c.estado = 'Parcial';
+    c.fechaPago = null;
+  } else {
+    c.estado = 'Pendiente';
+    c.fechaPago = null;
+  }
+  c.saldo = sal;
+}
+
+function setPagoMode(mode) {
+  pagoMode=mode;
+  document.getElementById('mode-btn-total').classList.toggle('active',mode==='total');
+  document.getElementById('mode-btn-parcial').classList.toggle('active',mode==='parcial');
+  document.getElementById('pago-monto-group').style.display=mode==='parcial'?'block':'none';
+  document.getElementById('saldo-preview').textContent='';
+}
+
+function actualizarSaldo() {
+  if(!_pagoC) return;
+  const pagado=parseFloat(document.getElementById('p-monto-pagado').value)||0;
+  const sal=saldoCuota(_pagoC);
+  const restante=sal-pagado;
+  const el=document.getElementById('saldo-preview');
+  if(pagado<=0){el.textContent='';return;}
+  if(pagado>=sal){
+    el.textContent='✅ Cubre el saldo completo — se marcará como Pagado';
+    el.style.color='var(--green)';
+  } else if(pagado>0){
+    el.textContent=`Saldo restante: ${fmtMoney(restante)} — quedará como Parcial`;
+    el.style.color='var(--purple)';
+  }
+}
+
+function guardarPago() {
+  const fp=document.getElementById('p-fecha-pago').value;
+  const fv=document.getElementById('p-fecha-venc').value;
+  const comentario=document.getElementById('p-comentario').value.trim();
+  if(!fp){alert('Ingresa la fecha de pago');return;}
+
+  const {pid,ci}=editingPago;
+  const p=loans.find(x=>x.id===pid);
+  const c=p.cuotas[ci];
+  const sal=saldoCuota(c);
+
+  let montoPagadoAhora;
+  if(pagoMode==='total'){
+    montoPagadoAhora=sal;
+  } else {
+    montoPagadoAhora=parseFloat(document.getElementById('p-monto-pagado').value)||0;
+    if(montoPagadoAhora<=0){alert('Ingresa el monto pagado');return;}
+    if(montoPagadoAhora>sal){alert(`El monto supera el saldo pendiente (${fmtMoney(sal)})`);return;}
+  }
+
+  // Registrar pago en historial
+  if(!c.pagos) c.pagos=[];
+  c.pagos.push({fecha:parseD(fp), monto:montoPagadoAhora, comentario});
+
+  // Actualizar vencimiento si cambió
+  if(fv) c.venc=parseD(fv);
+
+  // Recalcular estado y saldo
+  recalcularEstadoCuota(c);
+
+  saveData();
+  renderAll();
+  cerrarModal('pago');
+}
+
+// ── Nuevo préstamo ────────────────────────────────────────────────────────────
+function abrirNuevoPrestamo() {
+  ['n-nombre','n-capital','n-plazo','n-nota'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('n-tasa').value='0';
+  document.getElementById('n-fecha').value=toInput(Date.now());
+  abrirModal('nuevo');
+  setTimeout(()=>document.getElementById('n-nombre').focus(),100);
+}
+
+function crearPrestamo() {
+  const sol  =document.getElementById('n-nombre').value.trim();
+  const cap  =parseFloat(document.getElementById('n-capital').value);
+  const plazo=parseInt(document.getElementById('n-plazo').value);
+  const tasa =parseFloat(document.getElementById('n-tasa').value||0)/100;
+  const fstr =document.getElementById('n-fecha').value;
+  const nota =document.getElementById('n-nota').value.trim();
+  if(!sol||!cap||!plazo||!fstr){alert('Completa los campos obligatorios (*)');return;}
+  const fecha=parseD(fstr);
+  const total=Math.round(cap*(1+tasa*plazo));
+  const cuotaBase=Math.round(total/plazo);
+  const nums=loans.map(p=>parseInt(p.id.slice(1))).filter(n=>!isNaN(n));
+  const id='P'+String(nums.length?Math.max(...nums)+1:1).padStart(3,'0');
+  const cuotas=Array.from({length:plazo},(_,i)=>{
+    const d=new Date(fecha); d.setMonth(d.getMonth()+(i+1)); d.setHours(0,0,0,0);
+    return {n:i+1,venc:d.getTime(),monto:cuotaBase,saldo:cuotaBase,estado:'Pendiente',pagos:[],fechaPago:null};
+  });
+  loans.push({id,sol,cap,plazo,tasa,fecha,total,nota,cuotas});
+  saveData(); buildFiltroSelector(); renderAll(); cerrarModal('nuevo');
+}
+
+// ── Detalle préstamo ──────────────────────────────────────────────────────────
+function verDetalle(pid) {
+  const p=loans.find(x=>x.id===pid);
+  document.getElementById('detalle-titulo').textContent=`${p.id} — ${p.sol}`;
+  const cob=cobrado(p), pct=Math.round(cob/p.total*100);
+  document.getElementById('detalle-body').innerHTML=`
+    <div class="loan-detail-grid">
+      <div class="detail-item"><label>Capital</label><div class="val">${fmtMoney(p.cap)}</div></div>
+      <div class="detail-item"><label>Total + interés</label><div class="val">${fmtMoney(p.total)}</div></div>
+      <div class="detail-item"><label>Tasa mensual</label><div class="val">${(p.tasa*100).toFixed(1)}%</div></div>
+      <div class="detail-item"><label>Plazo</label><div class="val">${p.plazo} meses</div></div>
+      <div class="detail-item"><label>Cobrado</label><div class="val" style="color:var(--green)">${fmtMoney(cob)}</div></div>
+      <div class="detail-item"><label>Pendiente</label><div class="val" style="color:var(--orange)">${fmtMoney(pendiente(p))}</div></div>
+    </div>
+    <div style="padding:10px 14px;background:var(--bg)">
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span>Avance</span><span>${pct}%</span></div>
+      <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:var(--green);border-radius:4px"></div>
+      </div>
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>N°</th><th>Vencimiento</th><th>Original</th><th>Pagado</th><th>Saldo</th><th>Estado</th><th></th></tr></thead>
+      <tbody>${p.cuotas.map((c,ci)=>`<tr>
+        <td>${c.n}</td><td>${fmtDate(c.venc)}</td>
+        <td>${fmtMoney(c.monto)}</td>
+        <td style="color:var(--green);font-weight:600">${fmtMoney(montoPagado(c))}</td>
+        <td style="color:${saldoCuota(c)>0?'var(--orange)':'var(--green)'};font-weight:600">${fmtMoney(saldoCuota(c))}</td>
+        <td>${badgeEstado(c)}</td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-outline btn-sm" onclick="cerrarModal('detalle');abrirPago('${pid}',${ci})" title="Pago">💳</button>
+          <button class="btn btn-outline btn-sm" onclick="cerrarModal('detalle');abrirEditVenc('${pid}',${ci})" title="Modificar vencimiento" style="margin-left:3px">📅</button>
+        </td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+  document.getElementById('btn-eliminar-prestamo').onclick=()=>eliminarPrestamo(pid);
+  abrirModal('detalle');
+}
+
+function eliminarPrestamo(pid) {
+  const p=loans.find(x=>x.id===pid);
+  if(!confirm(`¿Eliminar "${p.sol}" (${p.id})? Esta acción no se puede deshacer.`)) return;
+  loans=loans.filter(x=>x.id!==pid);
+  saveData(); buildFiltroSelector(); renderAll(); cerrarModal('detalle');
+}
+
+// ── Export / Import ───────────────────────────────────────────────────────────
+function exportData() {
+  const blob=new Blob([JSON.stringify({version:3,exportado:new Date().toISOString(),loans},null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`prestamos_ajrc_${new Date().toISOString().split('T')[0]}.json`;
+  a.click();
+}
+function importData(evt) {
+  const file=evt.target.files[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try {
+      const data=JSON.parse(e.target.result);
+      const imported=data.loans||data;
+      if(!Array.isArray(imported)) throw new Error('Formato inválido');
+      if(!confirm(`¿Importar ${imported.length} préstamos? Se reemplazarán los datos actuales.`)) return;
+      loans=imported; migrarDatos(); buildFiltroSelector(); renderAll();
+      alert(`✅ Importados ${imported.length} préstamos.`);
+    } catch(err){alert('❌ Error: '+err.message);}
+  };
+  reader.readAsText(file); evt.target.value='';
+}
+function limpiarDatos() {
+  if(!confirm('¿Eliminar TODOS los datos?')) return;
+  loans=[]; saveData(); buildFiltroSelector(); renderAll();
+}
+function renderDatos() {
+  const total=loans.reduce((s,p)=>s+p.cuotas.length,0);
+  const pag=loans.reduce((s,p)=>s+p.cuotas.filter(c=>c.estado==='Pagado').length,0);
+  const parc=loans.reduce((s,p)=>s+p.cuotas.filter(c=>c.estado==='Parcial').length,0);
+  const raw=localStorage.getItem(STORAGE_KEY);
+  const kb=raw?(new Blob([raw]).size/1024).toFixed(1):'0';
+  document.getElementById('resumen-datos').innerHTML=`
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px">
+      <div><div style="font-size:11px;color:var(--text2);font-weight:600">PRÉSTAMOS</div><div style="font-size:22px;font-weight:700">${loans.length}</div></div>
+      <div><div style="font-size:11px;color:var(--text2);font-weight:600">TOTAL CUOTAS</div><div style="font-size:22px;font-weight:700">${total}</div></div>
+      <div><div style="font-size:11px;color:var(--text2);font-weight:600">PAGADAS</div><div style="font-size:22px;font-weight:700;color:var(--green)">${pag}</div></div>
+      <div><div style="font-size:11px;color:var(--text2);font-weight:600">PARCIALES</div><div style="font-size:22px;font-weight:700;color:var(--purple)">${parc}</div></div>
+      <div><div style="font-size:11px;color:var(--text2);font-weight:600">TAMAÑO</div><div style="font-size:22px;font-weight:700">${kb} KB</div></div>
+    </div>
+    <p style="margin-top:16px;font-size:12px;color:var(--text2)">Exporta regularmente para hacer respaldo. Importa en otro dispositivo para sincronizar.</p>`;
+}
+
+// ── Editar Vencimiento ────────────────────────────────────────────────────────
+let editingVenc = null;
+
+function abrirEditVenc(pid, ci) {
+  const p = loans.find(x=>x.id===pid);
+  const c = p.cuotas[ci];
+  editingVenc = {pid, ci};
+
+  document.getElementById('venc-cuota-info').innerHTML =
+    `<b>${p.sol}</b> — Cuota ${c.n} de ${p.plazo} &nbsp;|&nbsp; ${fmtMoney(saldoCuota(c))} pendiente &nbsp;|&nbsp; ${badgeEstado(c)}`;
+
+  document.getElementById('venc-fecha-actual').value = toInput(c.venc);
+  document.getElementById('venc-fecha-nueva').value  = toInput(c.venc);
+  document.getElementById('venc-motivo').value = c.motivoCambioVenc || '';
+  document.getElementById('venc-aviso').textContent = '';
+
+  abrirModal('venc');
+  setTimeout(()=>document.getElementById('venc-fecha-nueva').focus(), 100);
+}
+
+function guardarVencimiento() {
+  const nuevaFecha = document.getElementById('venc-fecha-nueva').value;
+  const motivo     = document.getElementById('venc-motivo').value.trim();
+  if(!nuevaFecha){ alert('Ingresa la nueva fecha de vencimiento'); return; }
+
+  const {pid, ci} = editingVenc;
+  const p = loans.find(x=>x.id===pid);
+  const c = p.cuotas[ci];
+
+  const fechaAnterior = c.venc;
+  const fechaNueva    = parseD(nuevaFecha);
+
+  if(fechaNueva === fechaAnterior){
+    cerrarModal('venc');
+    return;
+  }
+
+  c.venc = fechaNueva;
+  if(motivo) c.motivoCambioVenc = motivo;
+
+  // Si la cuota estaba vencida y la nueva fecha es futura, puede salir de vencido
+  recalcularEstadoCuota(c);
+
+  saveData();
+  renderAll();
+  cerrarModal('venc');
+}
+
+// ── Tabs / Modales ────────────────────────────────────────────────────────────
+function switchTab(id,el) {
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('sec-'+id).classList.add('active');
+  if(id==='datos') renderDatos();
+}
+function abrirModal(id)  { document.getElementById('modal-'+id).classList.add('open'); }
+function cerrarModal(id) { document.getElementById('modal-'+id).classList.remove('open'); }
+
+function buildFiltroSelector() {
+  document.getElementById('f-prestamo').innerHTML='<option value="">Todos los préstamos</option>'+
+    loans.map(p=>`<option value="${p.id}">${p.id} — ${p.sol}</option>`).join('');
+}
+function renderAll() { renderKPIs(); renderAlertas(); renderPrestamos(); renderCuotas(); }
+
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') document.querySelectorAll('.modal-overlay.open').forEach(m=>m.classList.remove('open')); });
+document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{ if(e.target===m) m.classList.remove('open'); }));
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadData(); buildFiltroSelector(); renderAll();
+document.getElementById('fecha-header').textContent=today().toLocaleDateString('es-CL',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+</script>
+</body>
+</html>
