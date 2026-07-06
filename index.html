@@ -111,6 +111,9 @@
   .pago-mode-btn.active{border-color:var(--blue);background:var(--blue-light);color:var(--blue)}
   .fab{position:fixed;bottom:24px;right:24px;width:52px;height:52px;border-radius:50%;background:var(--blue);color:#fff;border:none;font-size:24px;cursor:pointer;box-shadow:0 4px 16px rgba(46,117,182,.5);z-index:150;display:flex;align-items:center;justify-content:center;transition:transform .15s}
   .fab:hover{transform:scale(1.08)}
+  /* Detalle modal table — más compacto */
+  #modal-detalle table th{font-size:11px;padding:8px 10px}
+  #modal-detalle table td{font-size:11px;padding:7px 10px}
   @media(max-width:600px){.form-row{grid-template-columns:1fr}.kpi-val{font-size:17px}th,td{padding:7px 9px}.content{padding:12px}}
 </style>
 </head>
@@ -294,7 +297,7 @@
 
 <!-- MODAL DETALLE PRÉSTAMO -->
 <div class="modal-overlay" id="modal-detalle">
-  <div class="modal" style="max-width:600px">
+  <div class="modal" style="max-width:960px">
     <div class="modal-header"><h3 id="detalle-titulo">Detalle</h3><button class="btn btn-outline btn-sm" onclick="cerrarModal('detalle')">✕</button></div>
     <div id="detalle-body"></div>
     <div class="modal-footer">
@@ -816,12 +819,13 @@ function verDetalle(pid) {
       </div>
     </div>
     <div class="table-wrap"><table>
-      <thead><tr><th>N°</th><th>Vencimiento</th><th>Original</th><th>Pagado</th><th>Saldo</th><th>Estado</th><th></th></tr></thead>
+      <thead><tr><th>N°</th><th>Vencimiento</th><th>Original</th><th>Pagado</th><th>Saldo</th><th>Fecha Pago</th><th>Estado</th><th></th></tr></thead>
       <tbody>${p.cuotas.map((c,ci)=>`<tr>
         <td>${c.n}</td><td>${fmtDate(c.venc)}</td>
         <td>${fmtMoney(c.monto)}</td>
         <td style="color:var(--green);font-weight:600">${fmtMoney(montoPagado(c))}</td>
         <td style="color:${saldoCuota(c)>0?'var(--orange)':'var(--green)'};font-weight:600">${fmtMoney(saldoCuota(c))}</td>
+        <td style="color:var(--text2);font-size:11px">${c.pagos&&c.pagos.length>0 ? c.pagos.map(pg=>fmtDate(pg.fecha)).join('<br>') : '—'}</td>
         <td>${badgeEstado(c)}</td>
         <td style="white-space:nowrap">
           <button class="btn btn-outline btn-sm" onclick="cerrarModal('detalle');abrirPago('${pid}',${ci})" title="Pago">💳</button>
