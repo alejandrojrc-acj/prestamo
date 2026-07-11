@@ -821,6 +821,12 @@ function verDetalle(pid) {
       <div class="detail-item"><label>Cobrado</label><div class="val" style="color:var(--green)">${fmtMoney(cob)}</div></div>
       <div class="detail-item"><label>Pendiente</label><div class="val" style="color:var(--orange)">${fmtMoney(pendiente(p))}</div></div>
     </div>
+    <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;background:var(--bg)">
+      <span style="font-size:11px;font-weight:600;color:var(--text2);white-space:nowrap">📧 Email:</span>
+      <input id="detalle-email-input" type="email" value="${p.email||''}" placeholder="correo@gmail.com"
+        style="flex:1;padding:6px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;color:var(--text)">
+      <button class="btn btn-primary btn-sm" onclick="guardarEmailPrestamo('${pid}')">Guardar</button>
+    </div>
     <div style="padding:10px 14px;background:var(--bg)">
       <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span>Avance</span><span>${pct}%</span></div>
       <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden">
@@ -897,6 +903,17 @@ function renderDatos() {
     <p style="margin-top:16px;font-size:12px;color:var(--text2)">Exporta regularmente para hacer respaldo. Importa en otro dispositivo para sincronizar.</p>`;
 }
 
+function guardarEmailPrestamo(pid) {
+  const p = loans.find(x=>x.id===pid);
+  const email = document.getElementById('detalle-email-input').value.trim();
+  p.email = email;
+  saveData();
+  renderAll();
+  // Feedback visual
+  const btn = document.querySelector('#detalle-email-input + button');
+  if(btn){ btn.textContent='✅ Guardado'; setTimeout(()=>btn.textContent='Guardar',1500); }
+}
+
 // ── Editar Vencimiento ────────────────────────────────────────────────────────
 let editingVenc = null;
 
@@ -953,12 +970,20 @@ let tokenClient = null;
 
 // Emails por solicitante (nombre base → email)
 const EMAILS_CONTACTO = {
-  'Carla Finol':               'carla.finol@gmail.com',
-  'Carla Finol (Compras)':     'carla.finol@gmail.com',
-  'Beto Martinez':             'jmfalberto91@gmail.com',
-  'Beto Martinez (Int.)':      'jmfalberto91@gmail.com',
-  'James Barbero':             'alejandrojrc@yahoo.com',
-  'Carlos Finol':              'cmfr85@hotmail.com',
+  'Carla Finol':                  'carla.finol@gmail.com',
+  'Carla Finol (hermano)':        'carla.finol@gmail.com',
+  'Carla Finol (Compras)':        'carla.finol@gmail.com',
+  'Carla Finol (Compra Sodimac)': 'carla.finol@gmail.com',
+  'Beto Martinez':                'jmfalberto91@gmail.com',
+  'Beto Martinez (Int.)':         'jmfalberto91@gmail.com',
+  'Beto Martinez (Pasajes Papá)': 'jmfalberto91@gmail.com',
+  'Beto Martinez (Arriendo Casa)':'jmfalberto91@gmail.com',
+  'James Barbero':                'alejandrojrc@yahoo.com',
+  'Carlos Finol':                 'cmfr85@hotmail.com',
+  'Carlos Finol (Arriendo)':      'cmfr85@hotmail.com',
+  'Carlos Finol (Auto)':          'cmfr85@hotmail.com',
+  'Alberto Ramirez (Celular)':    'albertojramirezc@gmail.com',
+  'Alberto Ramirez':              'albertojramirezc@gmail.com',
 };
 
 function initGmailClient() {
