@@ -58,6 +58,8 @@
   .alert-item:last-child{border-bottom:none;border-radius:0 0 7px 7px}
   .alert-info{flex:1}.alert-name{font-weight:600;font-size:13px}.alert-sub{font-size:11px;color:var(--text2);margin-top:2px}
   .alert-amount{font-weight:700;font-size:14px;white-space:nowrap}
+  .a-3d .alert-section-title{background:var(--green-light);color:var(--green)}
+  .a-3d .alert-item{border-left:3px solid var(--green)}
   .a-venc .alert-section-title{background:var(--red-light);color:var(--red)}
   .a-venc .alert-item{border-left:3px solid var(--red)}
   .a-7d .alert-section-title{background:var(--orange-light);color:var(--orange)}
@@ -116,6 +118,7 @@
   #modal-detalle table td{font-size:11px;padding:7px 10px}
   @media(max-width:600px){.form-row{grid-template-columns:1fr}.kpi-val{font-size:17px}th,td{padding:7px 9px}.content{padding:12px}}
 </style>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 
@@ -125,6 +128,7 @@
     <div class="date" id="fecha-header"></div>
   </div>
   <div class="header-actions">
+    <button class="btn btn-outline btn-sm" id="btn-gmail" onclick="toggleGmail()" title="Conectar Gmail">📧 Gmail</button>
     <button class="btn btn-outline btn-sm" onclick="exportData()">💾 Exportar</button>
     <label class="btn btn-outline btn-sm" style="cursor:pointer">📂 Importar<input type="file" accept=".json" onchange="importData(event)" style="display:none"></label>
   </div>
@@ -211,6 +215,7 @@
     <div class="modal-header"><h3>➕ Nuevo préstamo</h3><button class="btn btn-outline btn-sm" onclick="cerrarModal('nuevo')">✕</button></div>
     <div class="modal-body">
       <div class="form-group"><label>Solicitante *</label><input id="n-nombre" placeholder="Nombre completo"></div>
+      <div class="form-group"><label>Correo electrónico</label><input id="n-email" type="email" placeholder="correo@gmail.com"></div>
       <div class="form-row">
         <div class="form-group"><label>Capital prestado *</label><input id="n-capital" type="number" placeholder="1000000"></div>
         <div class="form-group"><label>Plazo (meses) *</label><input id="n-plazo" type="number" placeholder="3" min="1"></div>
@@ -412,15 +417,14 @@ function loadData() {
 }
 
 function migrarDatos() {
-  // Migra cuotas del formato anterior (sin pagos[]) al nuevo
   loans.forEach(p => {
+    // Migrar email desde mapa si no existe
+    if(!p.email) p.email = EMAILS_CONTACTO[p.sol] || '';
     p.cuotas.forEach(c => {
       if (!c.pagos) {
         c.pagos = c.estado==='Pagado' ? [{fecha:c.fechaPago||c.venc, monto:c.monto, comentario:''}] : [];
       }
-      if (c.saldo === undefined) {
-        c.saldo = saldoCuota(c);
-      }
+      if (c.saldo === undefined) { c.saldo = saldoCuota(c); }
     });
   });
   saveData();
@@ -453,7 +457,8 @@ function renderAlertas() {
   const nt = nowT();
   const grupos = [
     {title:'⛔ Cuotas vencidas',    cls:'a-venc', fn:c=>c.venc&&c.venc<nt &&c.estado!=='Pagado'},
-    {title:'⏰ Vence en 7 días',    cls:'a-7d',   fn:c=>c.venc&&c.venc>=nt&&c.venc<=nt+7*86400000&&c.estado!=='Pagado'},
+    {title:'🔔 Vence en 3 días',    cls:'a-3d',   fn:c=>c.venc&&c.venc>=nt&&c.venc<=nt+3*86400000&&c.estado!=='Pagado'},
+    {title:'⏰ Vence en 7 días',    cls:'a-7d',   fn:c=>c.venc&&c.venc>nt+3*86400000&&c.venc<=nt+7*86400000&&c.estado!=='Pagado'},
     {title:'📅 Vence en 30 días',   cls:'a-30d',  fn:c=>c.venc&&c.venc>nt+7*86400000&&c.venc<=nt+30*86400000&&c.estado!=='Pagado'},
   ];
   let html='', total=0;
@@ -461,6 +466,7 @@ function renderAlertas() {
     const items=[];
     loans.forEach(p=>p.cuotas.forEach((c,ci)=>{ if(fn(c)) items.push({p,c,ci}); }));
     total+=items.length;
+    const es3dias = cls==='a-3d';
     html+=`<div class="alert-section ${cls}">
       <div class="alert-section-title">${title}<span>${items.length} registros</span></div>
       ${items.length?`<div class="alert-wrap">`+items.map(({p,c,ci})=>`
@@ -471,8 +477,10 @@ function renderAlertas() {
             </div>
           </div>
           <div class="alert-amount">${fmtMoney(saldoCuota(c))}</div>
-          <button class="btn btn-primary btn-sm" onclick="abrirPago('${p.id}',${ci})">💳 Pagar</button>
-          <button class="btn btn-outline btn-sm" onclick="abrirEditVenc('${p.id}',${ci})" title="Modificar fecha vencimiento">📅</button>
+          <div style="display:flex;gap:5px;flex-shrink:0">
+            <button class="btn btn-primary btn-sm" onclick="abrirPago('${p.id}',${ci})">💳</button>
+            ${es3dias&&p.email?`<button class="btn btn-sm" style="background:var(--green);color:#fff" onclick="prepararEmail('${p.id}')" title="Enviar recordatorio por Gmail">📧</button>`:''}
+          </div>
         </div>`).join('')+`</div>`
       :`<div class="empty-alert">✅ Sin registros</div>`}
     </div>`;
@@ -770,7 +778,7 @@ function guardarPago() {
 
 // ── Nuevo préstamo ────────────────────────────────────────────────────────────
 function abrirNuevoPrestamo() {
-  ['n-nombre','n-capital','n-plazo','n-nota'].forEach(id=>document.getElementById(id).value='');
+  ['n-nombre','n-capital','n-plazo','n-nota','n-email'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('n-tasa').value='0';
   document.getElementById('n-fecha').value=toInput(Date.now());
   abrirModal('nuevo');
@@ -779,6 +787,7 @@ function abrirNuevoPrestamo() {
 
 function crearPrestamo() {
   const sol  =document.getElementById('n-nombre').value.trim();
+  const email=document.getElementById('n-email').value.trim();
   const cap  =parseFloat(document.getElementById('n-capital').value);
   const plazo=parseInt(document.getElementById('n-plazo').value);
   const tasa =parseFloat(document.getElementById('n-tasa').value||0)/100;
@@ -794,7 +803,7 @@ function crearPrestamo() {
     const d=new Date(fecha); d.setMonth(d.getMonth()+(i+1)); d.setHours(0,0,0,0);
     return {n:i+1,venc:d.getTime(),monto:cuotaBase,saldo:cuotaBase,estado:'Pendiente',pagos:[],fechaPago:null};
   });
-  loans.push({id,sol,cap,plazo,tasa,fecha,total,nota,cuotas});
+  loans.push({id,sol,email,cap,plazo,tasa,fecha,total,nota,cuotas});
   saveData(); buildFiltroSelector(); renderAll(); cerrarModal('nuevo');
 }
 
@@ -936,6 +945,183 @@ function guardarVencimiento() {
   cerrarModal('venc');
 }
 
+// ── Gmail API ─────────────────────────────────────────────────────────────────
+const GMAIL_CLIENT_ID = '383960811603-h8avstmou1rdpnkickjkltv84a0m37ft.apps.googleusercontent.com';
+const GMAIL_SCOPE     = 'https://www.googleapis.com/auth/gmail.send';
+let gmailToken = null;
+let tokenClient = null;
+
+// Emails por solicitante (nombre base → email)
+const EMAILS_CONTACTO = {
+  'Carla Finol':               'carla.finol@gmail.com',
+  'Carla Finol (Compras)':     'carla.finol@gmail.com',
+  'Beto Martinez':             'jmfalberto91@gmail.com',
+  'Beto Martinez (Int.)':      'jmfalberto91@gmail.com',
+  'James Barbero':             'alejandrojrc@yahoo.com',
+  'Carlos Finol':              'cmfr85@hotmail.com',
+};
+
+function initGmailClient() {
+  if(typeof google === 'undefined') return;
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: GMAIL_CLIENT_ID,
+    scope: GMAIL_SCOPE,
+    callback: (resp) => {
+      if(resp.error) { alert('Error al conectar Gmail: ' + resp.error); return; }
+      gmailToken = resp.access_token;
+      actualizarBotonGmail();
+      // Si hay un correo pendiente de enviar, enviarlo ahora
+      if(_pendingEmail) { _enviarEmailConToken(); }
+    },
+  });
+}
+
+function toggleGmail() {
+  if(gmailToken) {
+    // Desconectar
+    google.accounts.oauth2.revoke(gmailToken, ()=>{});
+    gmailToken = null;
+    actualizarBotonGmail();
+  } else {
+    if(!tokenClient) { alert('El cliente de Google no cargó aún. Espera un momento y vuelve a intentarlo.'); return; }
+    tokenClient.requestAccessToken();
+  }
+}
+
+function actualizarBotonGmail() {
+  const btn = document.getElementById('btn-gmail');
+  if(!btn) return;
+  if(gmailToken) {
+    btn.textContent = '✅ Gmail conectado';
+    btn.style.color = 'var(--green)';
+    btn.style.borderColor = 'var(--green)';
+  } else {
+    btn.textContent = '📧 Conectar Gmail';
+    btn.style.color = '';
+    btn.style.borderColor = '';
+  }
+}
+
+// Email pendiente mientras se autentica
+let _pendingEmail = null;
+
+function prepararEmail(pid) {
+  const p = loans.find(x=>x.id===pid);
+  const nt = nowT();
+  // Cuotas de este préstamo que vencen en los próximos 3 días
+  const cuotas3d = p.cuotas.filter(c =>
+    c.estado !== 'Pagado' && c.venc && c.venc >= nt && c.venc <= nt + 3*86400000
+  );
+  if(!cuotas3d.length) { alert('Este préstamo no tiene cuotas venciendo en los próximos 3 días.'); return; }
+
+  // Obtener email: primero del préstamo, luego del mapa, luego vacío
+  const email = p.email || EMAILS_CONTACTO[p.sol] || '';
+
+  // Construir asunto y cuerpo
+  const asunto = cuotas3d.length === 1
+    ? `Recordatorio de pago — Cuota ${cuotas3d[0].n} vence el ${fmtDate(cuotas3d[0].venc)}`
+    : `Recordatorio de pago — ${cuotas3d.length} cuotas próximas a vencer`;
+
+  const detalles = cuotas3d.map(c =>
+    `  • Cuota N° ${c.n} — Saldo: ${fmtMoney(saldoCuota(c))} — Vencimiento: ${fmtDate(c.venc)}`
+  ).join('\n');
+
+  const cuerpo =
+`Estimado/a ${p.sol.split(' ')[0]},
+
+Le recordamos que tiene el siguiente compromiso de pago próximo a vencer:
+
+${detalles}
+
+Le pedimos coordinar el pago antes de la fecha indicada.
+
+Ante cualquier consulta, no dude en contactarnos.
+
+Saludos cordiales,
+Alejandro`;
+
+  // Llenar modal
+  document.getElementById('email-para').value   = email;
+  document.getElementById('email-asunto').value = asunto;
+  document.getElementById('email-cuerpo').value = cuerpo;
+
+  // Estado Gmail en modal
+  const estadoEl = document.getElementById('email-estado-gmail');
+  if(gmailToken) {
+    estadoEl.innerHTML = '<div style="background:var(--green-light);color:var(--green);padding:8px 12px;border-radius:7px;font-size:12px;font-weight:600">✅ Gmail conectado — listo para enviar</div>';
+  } else {
+    estadoEl.innerHTML = '<div style="background:var(--yellow-light);color:#856404;padding:8px 12px;border-radius:7px;font-size:12px">⚠️ Gmail no conectado. Al hacer clic en Enviar se abrirá la ventana de autorización de Google.</div>';
+  }
+
+  _pendingEmail = {pid};
+  abrirModal('email');
+}
+
+function enviarEmail() {
+  if(!gmailToken) {
+    // Pedir autorización primero; al completar llamará _enviarEmailConToken
+    if(!tokenClient) { alert('El cliente de Google no cargó. Recarga la página.'); return; }
+    tokenClient.requestAccessToken();
+    return;
+  }
+  _enviarEmailConToken();
+}
+
+function _enviarEmailConToken() {
+  const para      = document.getElementById('email-para').value.trim();
+  const asunto    = document.getElementById('email-asunto').value.trim();
+  const cuerpo    = document.getElementById('email-cuerpo').value.trim();
+
+  if(!para)   { alert('Ingresa el correo del destinatario'); return; }
+  if(!asunto) { alert('El asunto no puede estar vacío'); return; }
+
+  // Construir raw MIME message en base64url
+  const mime = [
+    `To: ${para}`,
+    `Subject: =?UTF-8?B?${btoa(unescape(encodeURIComponent(asunto)))}?=`,
+    'MIME-Version: 1.0',
+    'Content-Type: text/plain; charset=UTF-8',
+    'Content-Transfer-Encoding: base64',
+    '',
+    btoa(unescape(encodeURIComponent(cuerpo)))
+  ].join('\r\n');
+
+  const raw = btoa(mime).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+
+  const btn = document.getElementById('btn-enviar-email');
+  btn.textContent = '⏳ Enviando...';
+  btn.disabled = true;
+
+  fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${gmailToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({raw}),
+  })
+  .then(r => r.json())
+  .then(data => {
+    btn.textContent = '📤 Enviar por Gmail';
+    btn.disabled = false;
+    if(data.id) {
+      cerrarModal('email');
+      _pendingEmail = null;
+      alert(`✅ Correo enviado correctamente a ${para}`);
+    } else {
+      const msg = data.error?.message || JSON.stringify(data);
+      alert('❌ Error al enviar: ' + msg);
+      // Si es error de token expirado, limpiar y re-autorizar
+      if(data.error?.code === 401) { gmailToken = null; actualizarBotonGmail(); }
+    }
+  })
+  .catch(err => {
+    btn.textContent = '📤 Enviar por Gmail';
+    btn.disabled = false;
+    alert('❌ Error de red: ' + err.message);
+  });
+}
+
 // ── Tabs / Modales ────────────────────────────────────────────────────────────
 function switchTab(id,el) {
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
@@ -959,6 +1145,37 @@ document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click
 // ── Init ──────────────────────────────────────────────────────────────────────
 loadData(); buildFiltroSelector(); renderAll();
 document.getElementById('fecha-header').textContent=today().toLocaleDateString('es-CL',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+// Init Gmail cuando cargue el script de Google
+window.addEventListener('load', () => { setTimeout(initGmailClient, 1000); });
 </script>
+<!-- MODAL PREVIEW CORREO -->
+<div class="modal-overlay" id="modal-email">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header">
+      <h3>📧 Recordatorio de pago</h3>
+      <button class="btn btn-outline btn-sm" onclick="cerrarModal('email')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="email-estado-gmail" style="margin-bottom:14px"></div>
+      <div class="form-group">
+        <label>Para</label>
+        <input id="email-para" type="email" placeholder="correo@gmail.com">
+      </div>
+      <div class="form-group">
+        <label>Asunto</label>
+        <input id="email-asunto" type="text">
+      </div>
+      <div class="form-group">
+        <label>Mensaje</label>
+        <textarea id="email-cuerpo" rows="10" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;resize:vertical"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="cerrarModal('email')">Cancelar</button>
+      <button class="btn btn-primary" id="btn-enviar-email" onclick="enviarEmail()">📤 Enviar por Gmail</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
