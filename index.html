@@ -113,6 +113,9 @@
   .pago-mode-btn.active{border-color:var(--blue);background:var(--blue-light);color:var(--blue)}
   .fab{position:fixed;bottom:24px;right:24px;width:52px;height:52px;border-radius:50%;background:var(--blue);color:#fff;border:none;font-size:24px;cursor:pointer;box-shadow:0 4px 16px rgba(46,117,182,.5);z-index:150;display:flex;align-items:center;justify-content:center;transition:transform .15s}
   .fab:hover{transform:scale(1.08)}
+  .filtro-check.active{border-color:var(--blue);background:var(--blue-light);color:var(--blue);font-weight:600}
+  #fc-vencido.active{border-color:var(--red);background:var(--red-light);color:var(--red)}
+  #fc-completado.active{border-color:var(--green);background:var(--green-light);color:var(--green)}
   /* Detalle modal table — más compacto */
   #modal-detalle table th{font-size:11px;padding:8px 10px}
   #modal-detalle table td{font-size:11px;padding:7px 10px}
@@ -151,12 +154,19 @@
   <div id="sec-prestamos" class="section">
     <div class="toolbar">
       <input type="text" id="buscar" placeholder="🔍 Buscar solicitante..." oninput="renderPrestamos()">
-      <select id="f-estado" onchange="renderPrestamos()">
-        <option value="">Todos los estados</option>
-        <option value="activo">Activo</option>
-        <option value="vencido">Vencido</option>
-        <option value="completado">Completado</option>
-      </select>
+      <div id="filtro-estados" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <span style="font-size:11px;font-weight:600;color:var(--text2)">Estado:</span>
+        <label class="filtro-check" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border:1.5px solid var(--border);border-radius:20px;cursor:pointer;font-size:12px;background:#fff;user-select:none" id="fc-activo">
+          <input type="checkbox" value="activo" onchange="renderPrestamos()" style="display:none"> 🔵 Activo
+        </label>
+        <label class="filtro-check" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border:1.5px solid var(--border);border-radius:20px;cursor:pointer;font-size:12px;background:#fff;user-select:none" id="fc-vencido">
+          <input type="checkbox" value="vencido" onchange="renderPrestamos()" style="display:none"> ⛔ Vencido
+        </label>
+        <label class="filtro-check" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border:1.5px solid var(--border);border-radius:20px;cursor:pointer;font-size:12px;background:#fff;user-select:none" id="fc-completado">
+          <input type="checkbox" value="completado" onchange="renderPrestamos()" style="display:none"> ✅ Completado
+        </label>
+        <button class="btn btn-outline btn-sm" onclick="limpiarFiltroEstados()" style="font-size:11px">✕ Todos</button>
+      </div>
     </div>
     <div class="card">
       <div class="card-header">📋 Préstamos registrados
@@ -279,26 +289,35 @@
 
 <!-- MODAL EDITAR VENCIMIENTO -->
 <div class="modal-overlay" id="modal-venc">
-  <div class="modal" style="max-width:400px">
+  <div class="modal" style="max-width:440px">
     <div class="modal-header">
       <h3>📅 Modificar fecha de vencimiento</h3>
       <button class="btn btn-outline btn-sm" onclick="cerrarModal('venc')">✕</button>
     </div>
     <div class="modal-body">
       <div id="venc-cuota-info" style="background:var(--blue-light);padding:10px 12px;border-radius:7px;margin-bottom:16px;font-size:13px"></div>
-      <div class="form-group">
-        <label>Fecha de vencimiento actual</label>
-        <input id="venc-fecha-actual" type="date" disabled style="background:var(--bg);color:var(--text2)">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Fecha actual</label>
+          <input id="venc-fecha-actual" type="date" disabled style="background:var(--bg);color:var(--text2)">
+        </div>
+        <div class="form-group">
+          <label>Nueva fecha *</label>
+          <input id="venc-fecha-nueva" type="date" oninput="actualizarPreviewVenc()">
+        </div>
       </div>
-      <div class="form-group">
-        <label>Nueva fecha de vencimiento *</label>
-        <input id="venc-fecha-nueva" type="date">
+      <!-- Opción recalcular cuotas siguientes -->
+      <div style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:14px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:500">
+          <input type="checkbox" id="venc-recalcular" onchange="actualizarPreviewVenc()" style="width:16px;height:16px;cursor:pointer">
+          Recalcular fechas de cuotas posteriores (cada 30 días)
+        </label>
+        <div id="venc-preview" style="display:none;margin-top:10px;font-size:12px"></div>
       </div>
       <div class="form-group">
         <label>Motivo del cambio</label>
         <input id="venc-motivo" placeholder="Ej: Acuerdo con deudor, refinanciamiento...">
       </div>
-      <div id="venc-aviso" style="font-size:12px;color:var(--text2);margin-top:4px"></div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="cerrarModal('venc')">Cancelar</button>
@@ -502,12 +521,28 @@ function renderAlertas() {
 }
 
 // ── Render Préstamos ──────────────────────────────────────────────────────────
+function getEstadosFiltrados() {
+  const checks = document.querySelectorAll('#filtro-estados input[type=checkbox]');
+  const activos = Array.from(checks).filter(c=>c.checked).map(c=>c.value);
+  // Update visual state
+  document.querySelectorAll('.filtro-check').forEach(lbl => {
+    const cb = lbl.querySelector('input');
+    lbl.classList.toggle('active', cb.checked);
+  });
+  return activos; // empty = todos
+}
+
+function limpiarFiltroEstados() {
+  document.querySelectorAll('#filtro-estados input[type=checkbox]').forEach(c=>c.checked=false);
+  renderPrestamos();
+}
+
 function renderPrestamos() {
   const q  = (document.getElementById('buscar').value||'').toLowerCase();
-  const ef = document.getElementById('f-estado').value;
+  const ef = getEstadosFiltrados();
   const rows = loans.filter(p=>{
     if(q&&!p.sol.toLowerCase().includes(q)) return false;
-    if(ef&&getEstado(p)!==ef) return false;
+    if(ef.length>0&&!ef.includes(getEstado(p))) return false;
     return true;
   });
   const eBadge={completado:'<span class="badge badge-ok">Completado</span>',vencido:'<span class="badge badge-venc">Vencido</span>',activo:'<span class="badge badge-pend">Activo</span>'};
@@ -1118,39 +1153,94 @@ function abrirEditVenc(pid, ci) {
   const c = p.cuotas[ci];
   editingVenc = {pid, ci};
 
+  // Count cuotas posteriores pendientes
+  const posteriores = p.cuotas.filter((cu,idx)=>idx>ci&&cu.estado!=='Pagado');
+
   document.getElementById('venc-cuota-info').innerHTML =
-    `<b>${p.sol}</b> — Cuota ${c.n} de ${p.plazo} &nbsp;|&nbsp; ${fmtMoney(saldoCuota(c))} pendiente &nbsp;|&nbsp; ${badgeEstado(c)}`;
+    `<b>${p.sol}</b> — Cuota ${c.n} de ${p.plazo} &nbsp;|&nbsp; ${fmtMoney(saldoCuota(c))} pendiente &nbsp;|&nbsp; ${badgeEstado(c)}`+
+    (posteriores.length>0?`<br><span style="font-size:11px;color:var(--text2);margin-top:4px;display:block">📋 Hay <b>${posteriores.length}</b> cuota(s) posterior(es) que se pueden recalcular.</span>`:'');
 
   document.getElementById('venc-fecha-actual').value = toInput(c.venc);
   document.getElementById('venc-fecha-nueva').value  = toInput(c.venc);
   document.getElementById('venc-motivo').value = c.motivoCambioVenc || '';
-  document.getElementById('venc-aviso').textContent = '';
+  document.getElementById('venc-recalcular').checked = false;
+  document.getElementById('venc-recalcular').disabled = posteriores.length===0;
+  document.getElementById('venc-preview').style.display='none';
 
   abrirModal('venc');
   setTimeout(()=>document.getElementById('venc-fecha-nueva').focus(), 100);
 }
 
+function actualizarPreviewVenc() {
+  const recalc = document.getElementById('venc-recalcular').checked;
+  const nuevaFechaStr = document.getElementById('venc-fecha-nueva').value;
+  const prev = document.getElementById('venc-preview');
+
+  if(!recalc || !nuevaFechaStr || !editingVenc) {
+    prev.style.display='none';
+    return;
+  }
+
+  const {pid, ci} = editingVenc;
+  const p = loans.find(x=>x.id===pid);
+  const nuevaFecha = new Date(parseD(nuevaFechaStr));
+
+  // Calcular nuevas fechas para cuotas posteriores pendientes
+  const posteriores = p.cuotas.filter((cu,idx)=>idx>ci&&cu.estado!=='Pagado');
+  if(posteriores.length===0){ prev.style.display='none'; return; }
+
+  const nuevasFechas = posteriores.map((_,i)=>{
+    const d = new Date(nuevaFecha);
+    d.setDate(d.getDate()+30*(i+1));
+    return d;
+  });
+
+  prev.style.display='block';
+  prev.innerHTML=`
+    <div style="font-weight:600;margin-bottom:6px;color:var(--blue)">Vista previa — nuevas fechas:</div>
+    <div style="display:grid;grid-template-columns:auto auto;gap:4px 16px;max-height:140px;overflow-y:auto">
+      ${posteriores.map((cu,i)=>`
+        <span style="color:var(--text2)">Cuota ${cu.n}:</span>
+        <span style="font-weight:600">${nuevasFechas[i].toLocaleDateString('es-CL')} <span style="color:var(--text2);font-weight:400">(antes: ${fmtDate(cu.venc)})</span></span>
+      `).join('')}
+    </div>`;
+}
+
 function guardarVencimiento() {
-  const nuevaFecha = document.getElementById('venc-fecha-nueva').value;
-  const motivo     = document.getElementById('venc-motivo').value.trim();
-  if(!nuevaFecha){ alert('Ingresa la nueva fecha de vencimiento'); return; }
+  const nuevaFechaStr = document.getElementById('venc-fecha-nueva').value;
+  const motivo        = document.getElementById('venc-motivo').value.trim();
+  const recalcular    = document.getElementById('venc-recalcular').checked;
+  if(!nuevaFechaStr){ alert('Ingresa la nueva fecha de vencimiento'); return; }
 
   const {pid, ci} = editingVenc;
   const p = loans.find(x=>x.id===pid);
   const c = p.cuotas[ci];
+  const fechaNueva = parseD(nuevaFechaStr);
 
-  const fechaAnterior = c.venc;
-  const fechaNueva    = parseD(nuevaFecha);
+  if(fechaNueva === c.venc){ cerrarModal('venc'); return; }
 
-  if(fechaNueva === fechaAnterior){
-    cerrarModal('venc');
-    return;
+  // Confirmación si hay recalculo
+  if(recalcular) {
+    const posteriores = p.cuotas.filter((cu,idx)=>idx>ci&&cu.estado!=='Pagado');
+    if(posteriores.length>0){
+      const msg = `¿Confirmas los cambios?\n\n• Cuota ${c.n}: nueva fecha ${new Date(fechaNueva).toLocaleDateString('es-CL')}\n• Se recalcularán las fechas de ${posteriores.length} cuota(s) posterior(es) cada 30 días\n\nEsta acción no se puede deshacer.`;
+      if(!confirm(msg)) return;
+      // Aplicar recálculo
+      const base = new Date(fechaNueva);
+      posteriores.forEach((cu,i)=>{
+        const d = new Date(base);
+        d.setDate(d.getDate()+30*(i+1));
+        d.setHours(0,0,0,0);
+        cu.venc = d.getTime();
+        if(motivo) cu.motivoCambioVenc = motivo;
+        recalcularEstadoCuota(cu);
+      });
+    }
   }
 
+  // Aplicar fecha a esta cuota
   c.venc = fechaNueva;
   if(motivo) c.motivoCambioVenc = motivo;
-
-  // Si la cuota estaba vencida y la nueva fecha es futura, puede salir de vencido
   recalcularEstadoCuota(c);
 
   saveData();
