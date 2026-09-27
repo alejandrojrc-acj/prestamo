@@ -224,6 +224,13 @@
         <div class="form-group"><label>Tasa mensual (%)</label><input id="n-tasa" type="number" placeholder="0" step="0.1" min="0"></div>
         <div class="form-group"><label>Fecha del préstamo *</label><input id="n-fecha" type="date"></div>
       </div>
+      <div class="form-group">
+        <label>Tipo de préstamo</label>
+        <select id="n-tipo">
+          <option value="cuotas">Cuotas iguales (capital + interés)</option>
+          <option value="interes">Solo intereses mensuales + capital al final</option>
+        </select>
+      </div>
       <div class="form-group"><label>Notas</label><input id="n-nota" placeholder="Opcional"></div>
     </div>
     <div class="modal-footer">
@@ -305,8 +312,10 @@
   <div class="modal" style="max-width:960px">
     <div class="modal-header"><h3 id="detalle-titulo">Detalle</h3><button class="btn btn-outline btn-sm" onclick="cerrarModal('detalle')">✕</button></div>
     <div id="detalle-body"></div>
-    <div class="modal-footer">
+    <div class="modal-footer" style="flex-wrap:wrap;gap:6px">
       <button class="btn btn-danger btn-sm" id="btn-eliminar-prestamo">🗑 Eliminar</button>
+      <button class="btn btn-outline btn-sm" id="btn-editar-condiciones">⚙️ Modificar condiciones</button>
+      <button class="btn btn-outline btn-sm" id="btn-extender-plazo">📆 Extender plazo</button>
       <button class="btn btn-outline" onclick="cerrarModal('detalle')">Cerrar</button>
     </div>
   </div>
@@ -351,9 +360,11 @@ function isVencida(c) {
   return c.estado!=='Pagado' && c.venc && c.venc < nowT();
 }
 function getEstado(p) {
+  const saldoTotal = pendiente(p);
+  if(saldoTotal <= 0) return 'completado';
   const pend = p.cuotas.filter(c=>c.estado!=='Pagado');
-  if (!pend.length) return 'completado';
-  if (pend.some(c=>isVencida(c))) return 'vencido';
+  if(!pend.length) return 'completado';
+  if(pend.some(c=>isVencida(c))) return 'vencido';
   return 'activo';
 }
 function diasLabel(c) {
@@ -418,13 +429,14 @@ function loadData() {
 
 function migrarDatos() {
   loans.forEach(p => {
-    // Migrar email desde mapa si no existe
     if(!p.email) p.email = EMAILS_CONTACTO[p.sol] || '';
+    if(!p.tipo)  p.tipo  = 'cuotas'; // default
     p.cuotas.forEach(c => {
       if (!c.pagos) {
         c.pagos = c.estado==='Pagado' ? [{fecha:c.fechaPago||c.venc, monto:c.monto, comentario:''}] : [];
       }
       if (c.saldo === undefined) { c.saldo = saldoCuota(c); }
+      if (!c.tipoCuota) { c.tipoCuota = 'mixta'; }
     });
   });
   saveData();
@@ -780,6 +792,7 @@ function guardarPago() {
 function abrirNuevoPrestamo() {
   ['n-nombre','n-capital','n-plazo','n-nota','n-email'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('n-tasa').value='0';
+  document.getElementById('n-tipo').value='cuotas';
   document.getElementById('n-fecha').value=toInput(Date.now());
   abrirModal('nuevo');
   setTimeout(()=>document.getElementById('n-nombre').focus(),100);
@@ -793,17 +806,38 @@ function crearPrestamo() {
   const tasa =parseFloat(document.getElementById('n-tasa').value||0)/100;
   const fstr =document.getElementById('n-fecha').value;
   const nota =document.getElementById('n-nota').value.trim();
+  const tipo =document.getElementById('n-tipo').value;
   if(!sol||!cap||!plazo||!fstr){alert('Completa los campos obligatorios (*)');return;}
   const fecha=parseD(fstr);
-  const total=Math.round(cap*(1+tasa*plazo));
-  const cuotaBase=Math.round(total/plazo);
   const nums=loans.map(p=>parseInt(p.id.slice(1))).filter(n=>!isNaN(n));
   const id='P'+String(nums.length?Math.max(...nums)+1:1).padStart(3,'0');
-  const cuotas=Array.from({length:plazo},(_,i)=>{
-    const d=new Date(fecha); d.setMonth(d.getMonth()+(i+1)); d.setHours(0,0,0,0);
-    return {n:i+1,venc:d.getTime(),monto:cuotaBase,saldo:cuotaBase,estado:'Pendiente',pagos:[],fechaPago:null};
-  });
-  loans.push({id,sol,email,cap,plazo,tasa,fecha,total,nota,cuotas});
+
+  let total, cuotas;
+  if(tipo==='interes') {
+    // Solo intereses mes a mes + capital bullet final
+    const interesMensual = Math.round(cap * tasa);
+    total = cap + interesMensual * plazo;
+    cuotas = Array.from({length:plazo},(_,i)=>{
+      const d=new Date(fecha); d.setMonth(d.getMonth()+(i+1)); d.setHours(0,0,0,0);
+      const esUltima = i===plazo-1;
+      return {
+        n:i+1, venc:d.getTime(),
+        monto: esUltima ? cap + interesMensual : interesMensual,
+        saldo: esUltima ? cap + interesMensual : interesMensual,
+        estado:'Pendiente', pagos:[], fechaPago:null,
+        tipoCuota: esUltima ? 'capital' : 'interes'
+      };
+    });
+  } else {
+    // Cuotas iguales
+    total = Math.round(cap*(1+tasa*plazo));
+    const cuotaBase = Math.round(total/plazo);
+    cuotas = Array.from({length:plazo},(_,i)=>{
+      const d=new Date(fecha); d.setMonth(d.getMonth()+(i+1)); d.setHours(0,0,0,0);
+      return {n:i+1,venc:d.getTime(),monto:cuotaBase,saldo:cuotaBase,estado:'Pendiente',pagos:[],fechaPago:null,tipoCuota:'mixta'};
+    });
+  }
+  loans.push({id,sol,email,cap,plazo,tasa,fecha,total,nota,tipo,cuotas});
   saveData(); buildFiltroSelector(); renderAll(); cerrarModal('nuevo');
 }
 
@@ -820,6 +854,7 @@ function verDetalle(pid) {
       <div class="detail-item"><label>Plazo</label><div class="val">${p.plazo} meses</div></div>
       <div class="detail-item"><label>Cobrado</label><div class="val" style="color:var(--green)">${fmtMoney(cob)}</div></div>
       <div class="detail-item"><label>Pendiente</label><div class="val" style="color:var(--orange)">${fmtMoney(pendiente(p))}</div></div>
+      <div class="detail-item"><label>Tipo</label><div class="val" style="font-size:12px">${p.tipo==='interes'?'<span class="badge badge-parcial">Solo intereses</span>':'<span class="badge badge-pend">Cuotas iguales</span>'}</div></div>
     </div>
     <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;background:var(--bg)">
       <span style="font-size:11px;font-weight:600;color:var(--text2);white-space:nowrap">📧 Email:</span>
@@ -834,9 +869,10 @@ function verDetalle(pid) {
       </div>
     </div>
     <div class="table-wrap"><table>
-      <thead><tr><th>N°</th><th>Vencimiento</th><th>Original</th><th>Pagado</th><th>Saldo</th><th>Fecha Pago</th><th>Estado</th><th></th></tr></thead>
+      <thead><tr><th>N°</th><th>Vencimiento</th><th>Tipo</th><th>Original</th><th>Pagado</th><th>Saldo</th><th>Fecha Pago</th><th>Estado</th><th></th></tr></thead>
       <tbody>${p.cuotas.map((c,ci)=>`<tr>
         <td>${c.n}</td><td>${fmtDate(c.venc)}</td>
+        <td style="font-size:11px">${c.tipoCuota==='capital'?'<span class="badge" style="background:#e8e0f7;color:#6f42c1">Capital</span>':c.tipoCuota==='interes'?'<span class="badge badge-pend">Interés</span>':'<span class="badge" style="background:#e9ecef;color:#495057">Mixta</span>'}</td>
         <td>${fmtMoney(c.monto)}</td>
         <td style="color:var(--green);font-weight:600">${fmtMoney(montoPagado(c))}</td>
         <td style="color:${saldoCuota(c)>0?'var(--orange)':'var(--green)'};font-weight:600">${fmtMoney(saldoCuota(c))}</td>
@@ -849,6 +885,8 @@ function verDetalle(pid) {
       </tr>`).join('')}</tbody>
     </table></div>`;
   document.getElementById('btn-eliminar-prestamo').onclick=()=>eliminarPrestamo(pid);
+  document.getElementById('btn-editar-condiciones').onclick=()=>{ cerrarModal('detalle'); abrirCondiciones(pid); };
+  document.getElementById('btn-extender-plazo').onclick=()=>{ cerrarModal('detalle'); abrirExtender(pid); };
   abrirModal('detalle');
 }
 
@@ -912,6 +950,164 @@ function guardarEmailPrestamo(pid) {
   // Feedback visual
   const btn = document.querySelector('#detalle-email-input + button');
   if(btn){ btn.textContent='✅ Guardado'; setTimeout(()=>btn.textContent='Guardar',1500); }
+}
+
+// ── Modificar condiciones ─────────────────────────────────────────────────────
+let editingCond = null;
+let condPreview = null;
+
+function toggleCondTipo() {
+  document.getElementById('btn-aplicar-cond').style.display='none';
+  document.getElementById('cond-preview').style.display='none';
+}
+
+function abrirCondiciones(pid) {
+  const p = loans.find(x=>x.id===pid);
+  editingCond = pid;
+  condPreview = null;
+  document.getElementById('cond-info').innerHTML =
+    `<b>${p.sol}</b> — Capital: ${fmtMoney(p.cap)} · Plazo: ${p.plazo} meses · Tasa: ${(p.tasa*100).toFixed(1)}%`;
+  document.getElementById('cond-capital').value = p.cap;
+  document.getElementById('cond-tasa').value    = (p.tasa*100).toFixed(2);
+  document.getElementById('cond-plazo').value   = p.plazo;
+  document.getElementById('cond-tipo').value    = p.tipo||'cuotas';
+  document.getElementById('cond-preview').style.display='none';
+  document.getElementById('btn-aplicar-cond').style.display='none';
+  abrirModal('condiciones');
+}
+
+function previewCondiciones() {
+  const p = loans.find(x=>x.id===editingCond);
+  const nuevoCap   = parseFloat(document.getElementById('cond-capital').value);
+  const nuevaTasa  = parseFloat(document.getElementById('cond-tasa').value||0)/100;
+  const nuevoPlazo = parseInt(document.getElementById('cond-plazo').value);
+  const nuevoTipo  = document.getElementById('cond-tipo').value;
+  if(!nuevoCap||!nuevoPlazo){ alert('Completa capital y plazo'); return; }
+
+  // Cuotas ya pagadas
+  const pagadas = p.cuotas.filter(c=>c.estado==='Pagado');
+  const cobradoHasta = pagadas.reduce((s,c)=>s+montoPagado(c),0);
+
+  // Saldo capital restante después de pagos
+  const saldoRestante = nuevoCap - cobradoHasta;
+  if(saldoRestante < 0){ alert('El capital ingresado es menor al monto ya cobrado. Ajusta el capital.'); return; }
+
+  // Cuotas futuras pendientes
+  const cuotasPendientes = p.cuotas.filter(c=>c.estado!=='Pagado').length;
+  const cuotasNuevas     = Math.max(nuevoPlazo - pagadas.length, 1);
+
+  let nuevasCuotas, nuevoTotal;
+  if(nuevoTipo==='interes'){
+    const intMensual = Math.round(nuevoCap * nuevaTasa);
+    const intRestante = Math.round(saldoRestante * nuevaTasa);
+    nuevoTotal = cobradoHasta + intMensual * cuotasNuevas + nuevoCap;
+    nuevasCuotas = Array.from({length:cuotasNuevas},(_,i)=>({
+      monto: i===cuotasNuevas-1 ? nuevoCap+intRestante : intRestante,
+      tipoCuota: i===cuotasNuevas-1 ? 'capital' : 'interes'
+    }));
+  } else {
+    const cuotaBase = Math.round(saldoRestante*(1+nuevaTasa*cuotasNuevas)/cuotasNuevas);
+    nuevoTotal = cobradoHasta + cuotaBase * cuotasNuevas;
+    nuevasCuotas = Array.from({length:cuotasNuevas},()=>({monto:cuotaBase,tipoCuota:'mixta'}));
+  }
+
+  condPreview = {nuevoCap,nuevaTasa,nuevoPlazo,nuevoTipo,nuevasCuotas,nuevoTotal,pagadas,cuotasNuevas};
+
+  const prev = document.getElementById('cond-preview');
+  prev.style.display='block';
+  prev.innerHTML=`
+    <div style="font-weight:600;margin-bottom:6px">Vista previa del nuevo plan:</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px">
+      <div>Cuotas pagadas (sin cambio): <b>${pagadas.length}</b></div>
+      <div>Cuotas nuevas a generar: <b>${cuotasNuevas}</b></div>
+      <div>Monto cuota nueva: <b>${fmtMoney(nuevasCuotas[0].monto)}${nuevoTipo==='interes'?' (interés)':''}</b></div>
+      ${nuevoTipo==='interes'?`<div>Última cuota (capital): <b>${fmtMoney(nuevasCuotas[cuotasNuevas-1].monto)}</b></div>`:''}
+      <div>Nuevo total del préstamo: <b>${fmtMoney(nuevoTotal)}</b></div>
+    </div>`;
+  document.getElementById('btn-aplicar-cond').style.display='inline-flex';
+}
+
+function aplicarCondiciones() {
+  if(!condPreview) return;
+  const p = loans.find(x=>x.id===editingCond);
+  const {nuevoCap,nuevaTasa,nuevoPlazo,nuevoTipo,nuevasCuotas,nuevoTotal,pagadas,cuotasNuevas} = condPreview;
+
+  // Obtener última fecha de cuota pagada para proyectar desde ahí
+  let baseDate;
+  if(pagadas.length>0){
+    baseDate = new Date(Math.max(...pagadas.map(c=>c.venc)));
+  } else {
+    baseDate = new Date(p.fecha);
+  }
+
+  // Reconstruir cuotas: pagadas originales + nuevas futuras
+  const cuotasFuturas = nuevasCuotas.map((nc,i)=>{
+    const d = new Date(baseDate); d.setMonth(d.getMonth()+(i+1)); d.setHours(0,0,0,0);
+    return {
+      n: pagadas.length+i+1,
+      venc: d.getTime(),
+      monto: nc.monto, saldo: nc.monto,
+      estado:'Pendiente', pagos:[], fechaPago:null,
+      tipoCuota: nc.tipoCuota
+    };
+  });
+
+  p.cap   = nuevoCap;
+  p.tasa  = nuevaTasa;
+  p.plazo = nuevoPlazo;
+  p.tipo  = nuevoTipo;
+  p.total = nuevoTotal;
+  p.cuotas = [...pagadas, ...cuotasFuturas];
+
+  saveData(); renderAll(); cerrarModal('condiciones');
+  alert(`✅ Condiciones actualizadas. Se generaron ${cuotasNuevas} cuotas nuevas.`);
+}
+
+// ── Extender plazo ────────────────────────────────────────────────────────────
+let editingExt = null;
+
+function abrirExtender(pid) {
+  const p = loans.find(x=>x.id===pid);
+  editingExt = pid;
+  const saldo = pendiente(p);
+  const ultimaVenc = p.cuotas.length>0 ? new Date(Math.max(...p.cuotas.map(c=>c.venc))) : new Date();
+  document.getElementById('ext-info').innerHTML =
+    `<b>${p.sol}</b> — Saldo pendiente: <b style="color:var(--orange)">${fmtMoney(saldo)}</b> · Última cuota: ${fmtDate(ultimaVenc.getTime())}`;
+  document.getElementById('ext-cuotas').value = '';
+  document.getElementById('ext-monto').value  = '';
+  document.getElementById('ext-preview').style.display='none';
+  abrirModal('extender');
+}
+
+function aplicarExtension() {
+  const p = loans.find(x=>x.id===editingExt);
+  const nCuotas = parseInt(document.getElementById('ext-cuotas').value);
+  if(!nCuotas||nCuotas<1){ alert('Ingresa cuántas cuotas agregar'); return; }
+
+  const saldoPend = pendiente(p);
+  const montoInput = parseFloat(document.getElementById('ext-monto').value);
+  const montoCuota = montoInput>0 ? montoInput : Math.round(saldoPend/nCuotas);
+
+  // Partir desde la última fecha registrada
+  const ultimaVenc = new Date(Math.max(...p.cuotas.map(c=>c.venc)));
+  const ultimaN    = p.cuotas.length;
+
+  const nuevas = Array.from({length:nCuotas},(_,i)=>{
+    const d = new Date(ultimaVenc); d.setMonth(d.getMonth()+(i+1)); d.setHours(0,0,0,0);
+    return {
+      n: ultimaN+i+1, venc:d.getTime(),
+      monto:montoCuota, saldo:montoCuota,
+      estado:'Pendiente', pagos:[], fechaPago:null,
+      tipoCuota: p.tipo==='interes'&&i===nCuotas-1 ? 'capital' : (p.tipo==='interes'?'interes':'mixta')
+    };
+  });
+
+  p.cuotas.push(...nuevas);
+  p.plazo = p.cuotas.length;
+  p.total = p.cuotas.reduce((s,c)=>s+c.monto,0);
+
+  saveData(); renderAll(); cerrarModal('extender');
+  alert(`✅ Se agregaron ${nCuotas} cuotas nuevas. Nuevo plazo: ${p.plazo} meses.`);
 }
 
 // ── Editar Vencimiento ────────────────────────────────────────────────────────
@@ -1173,7 +1369,79 @@ document.getElementById('fecha-header').textContent=today().toLocaleDateString('
 // Init Gmail cuando cargue el script de Google
 window.addEventListener('load', () => { setTimeout(initGmailClient, 1000); });
 </script>
-<!-- MODAL PREVIEW CORREO -->
+<!-- MODAL EDITAR CONDICIONES CRÉDITO -->
+<div class="modal-overlay" id="modal-condiciones">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <h3>⚙️ Modificar condiciones del crédito</h3>
+      <button class="btn btn-outline btn-sm" onclick="cerrarModal('condiciones')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="cond-info" style="background:var(--blue-light);padding:10px 12px;border-radius:7px;margin-bottom:16px;font-size:13px"></div>
+      <div style="background:var(--yellow-light);border-radius:7px;padding:10px 12px;margin-bottom:16px;font-size:12px;color:#856404">
+        ⚠️ Las cuotas ya <b>pagadas</b> no se modifican. El saldo restante se redistribuye en las cuotas futuras pendientes.
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Capital original</label>
+          <input id="cond-capital" type="number" placeholder="0">
+        </div>
+        <div class="form-group">
+          <label>Tasa mensual (%)</label>
+          <input id="cond-tasa" type="number" step="0.1" min="0" placeholder="0">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Tipo de préstamo</label>
+          <select id="cond-tipo" onchange="toggleCondTipo()">
+            <option value="cuotas">Cuotas iguales (capital + interés)</option>
+            <option value="interes">Solo intereses + capital al final</option>
+          </select>
+        </div>
+        <div class="form-group" id="cond-plazo-group">
+          <label>Plazo total (meses)</label>
+          <input id="cond-plazo" type="number" min="1" placeholder="3">
+        </div>
+      </div>
+      <div id="cond-preview" style="margin-top:8px;padding:10px 12px;background:var(--bg);border-radius:7px;font-size:12px;display:none"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="cerrarModal('condiciones')">Cancelar</button>
+      <button class="btn btn-primary" onclick="previewCondiciones()">Vista previa</button>
+      <button class="btn btn-success" id="btn-aplicar-cond" onclick="aplicarCondiciones()" style="display:none">✅ Aplicar cambios</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL EXTENDER PLAZO -->
+<div class="modal-overlay" id="modal-extender">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <h3>📆 Extender plazo</h3>
+      <button class="btn btn-outline btn-sm" onclick="cerrarModal('extender')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="ext-info" style="background:var(--blue-light);padding:10px 12px;border-radius:7px;margin-bottom:16px;font-size:13px"></div>
+      <div class="form-group">
+        <label>¿Cuántas cuotas adicionales agregar?</label>
+        <input id="ext-cuotas" type="number" min="1" max="60" placeholder="3">
+      </div>
+      <div class="form-group">
+        <label>Monto por cuota adicional</label>
+        <input id="ext-monto" type="number" placeholder="Se calcula automáticamente">
+        <div style="font-size:11px;color:var(--text2);margin-top:4px">Déjalo en blanco para distribuir el saldo restante en partes iguales.</div>
+      </div>
+      <div id="ext-preview" style="margin-top:8px;padding:10px 12px;background:var(--bg);border-radius:7px;font-size:12px;display:none"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="cerrarModal('extender')">Cancelar</button>
+      <button class="btn btn-success" onclick="aplicarExtension()">✅ Agregar cuotas</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL EMAIL -->
 <div class="modal-overlay" id="modal-email">
   <div class="modal" style="max-width:520px">
     <div class="modal-header">
