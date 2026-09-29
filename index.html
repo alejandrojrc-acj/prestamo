@@ -287,6 +287,36 @@
   </div>
 </div>
 
+<!-- MODAL EDITAR MONTO CUOTA -->
+<div class="modal-overlay" id="modal-monto">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header">
+      <h3>✏️ Modificar monto de cuota</h3>
+      <button class="btn btn-outline btn-sm" onclick="cerrarModal('monto')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="monto-cuota-info" style="background:var(--blue-light);padding:10px 12px;border-radius:7px;margin-bottom:16px;font-size:13px"></div>
+      <div class="form-group">
+        <label>Monto actual</label>
+        <input id="monto-actual" type="number" disabled style="background:var(--bg);color:var(--text2)">
+      </div>
+      <div class="form-group">
+        <label>Nuevo monto *</label>
+        <input id="monto-nuevo" type="number" placeholder="0" oninput="actualizarPreviewMonto()">
+      </div>
+      <div id="monto-preview" style="display:none;margin-top:4px;padding:10px 12px;background:var(--bg);border-radius:7px;font-size:12px"></div>
+      <div class="form-group" style="margin-top:12px">
+        <label>Motivo</label>
+        <input id="monto-motivo" placeholder="Ej: Ajuste por acuerdo, corrección...">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="cerrarModal('monto')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarMontoCuota()">Guardar monto</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL EDITAR VENCIMIENTO -->
 <div class="modal-overlay" id="modal-venc">
   <div class="modal" style="max-width:440px">
@@ -590,6 +620,7 @@ function renderCuotas() {
     <td style="white-space:nowrap">
       <button class="btn btn-outline btn-sm" onclick="abrirPago('${p.id}',${ci})" title="Registrar pago">💳</button>
       <button class="btn btn-outline btn-sm" onclick="abrirEditVenc('${p.id}',${ci})" title="Modificar fecha vencimiento" style="margin-left:3px">📅</button>
+      ${(c.estado==='Pendiente'||isVencida(c))&&(!c.pagos||c.pagos.length===0)?`<button class="btn btn-outline btn-sm" onclick="abrirEditMonto('${p.id}',${ci})" title="Modificar monto" style="margin-left:3px">✏️</button>`:''}
     </td>
   </tr>`).join('')||'<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--text2)">Sin resultados</td></tr>';
 }
@@ -916,6 +947,7 @@ function verDetalle(pid) {
         <td style="white-space:nowrap">
           <button class="btn btn-outline btn-sm" onclick="cerrarModal('detalle');abrirPago('${pid}',${ci})" title="Pago">💳</button>
           <button class="btn btn-outline btn-sm" onclick="cerrarModal('detalle');abrirEditVenc('${pid}',${ci})" title="Modificar vencimiento" style="margin-left:3px">📅</button>
+          ${(c.estado==='Pendiente'||isVencida(c))&&(!c.pagos||c.pagos.length===0)?`<button class="btn btn-outline btn-sm" onclick="cerrarModal('detalle');abrirEditMonto('${pid}',${ci})" title="Modificar monto" style="margin-left:3px">✏️</button>`:''}
         </td>
       </tr>`).join('')}</tbody>
     </table></div>`;
@@ -985,6 +1017,91 @@ function guardarEmailPrestamo(pid) {
   // Feedback visual
   const btn = document.querySelector('#detalle-email-input + button');
   if(btn){ btn.textContent='✅ Guardado'; setTimeout(()=>btn.textContent='Guardar',1500); }
+}
+
+// ── Editar monto de cuota ─────────────────────────────────────────────────────
+let editingMonto = null;
+
+function abrirEditMonto(pid, ci) {
+  const p = loans.find(x=>x.id===pid);
+  const c = p.cuotas[ci];
+
+  // Solo cuotas pendientes/vencidas sin pagos parciales
+  if(c.estado==='Pagado'){ alert('No se puede modificar una cuota ya pagada.'); return; }
+  if(c.pagos&&c.pagos.length>0){ alert('No se puede modificar el monto de una cuota con pagos parciales registrados.'); return; }
+
+  editingMonto = {pid, ci};
+
+  document.getElementById('monto-cuota-info').innerHTML =
+    `<b>${p.sol}</b> — Cuota ${c.n} de ${p.plazo} &nbsp;|&nbsp; ${badgeEstado(c)}<br>
+     <span style="font-size:11px;color:var(--text2);margin-top:3px;display:block">
+       Total actual del préstamo: ${fmtMoney(p.total)} &nbsp;·&nbsp; Por cobrar: ${fmtMoney(pendiente(p))}
+     </span>`;
+
+  document.getElementById('monto-actual').value = c.monto;
+  document.getElementById('monto-nuevo').value  = c.monto;
+  document.getElementById('monto-motivo').value = '';
+  document.getElementById('monto-preview').style.display='none';
+
+  abrirModal('monto');
+  setTimeout(()=>{ const el=document.getElementById('monto-nuevo'); el.focus(); el.select(); }, 100);
+}
+
+function actualizarPreviewMonto() {
+  if(!editingMonto) return;
+  const {pid, ci} = editingMonto;
+  const p = loans.find(x=>x.id===pid);
+  const c = p.cuotas[ci];
+  const nuevoMonto = parseFloat(document.getElementById('monto-nuevo').value)||0;
+  const prev = document.getElementById('monto-preview');
+
+  if(!nuevoMonto||nuevoMonto===c.monto){ prev.style.display='none'; return; }
+
+  const diff       = nuevoMonto - c.monto;
+  const nuevoTotal = p.total + diff;
+  const nuevoPend  = pendiente(p) + diff;
+
+  prev.style.display='block';
+  prev.innerHTML=`
+    <div style="font-weight:600;margin-bottom:6px;color:var(--blue)">Impacto del cambio:</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
+      <span style="color:var(--text2)">Monto cuota:</span>
+      <span>${fmtMoney(c.monto)} → <b>${fmtMoney(nuevoMonto)}</b> <span style="color:${diff>0?'var(--orange)':'var(--green)'}">(${diff>0?'+':''}${fmtMoney(diff)})</span></span>
+      <span style="color:var(--text2)">Total préstamo:</span>
+      <span>${fmtMoney(p.total)} → <b>${fmtMoney(nuevoTotal)}</b></span>
+      <span style="color:var(--text2)">Por cobrar:</span>
+      <span>${fmtMoney(pendiente(p))} → <b>${fmtMoney(nuevoPend)}</b></span>
+    </div>`;
+}
+
+function guardarMontoCuota() {
+  if(!editingMonto) return;
+  const {pid, ci} = editingMonto;
+  const p = loans.find(x=>x.id===pid);
+  const c = p.cuotas[ci];
+  const nuevoMonto = parseFloat(document.getElementById('monto-nuevo').value);
+  const motivo     = document.getElementById('monto-motivo').value.trim();
+
+  if(!nuevoMonto||nuevoMonto<=0){ alert('El monto debe ser mayor a 0'); return; }
+  if(nuevoMonto===c.monto){ cerrarModal('monto'); return; }
+
+  const diff       = nuevoMonto - c.monto;
+  const nuevoTotal = p.total + diff;
+  const nuevoPend  = pendiente(p) + diff;
+
+  const msg = `¿Confirmas el cambio?\n\n• Cuota ${c.n}: ${fmtMoney(c.monto)} → ${fmtMoney(nuevoMonto)}\n• Total préstamo: ${fmtMoney(p.total)} → ${fmtMoney(nuevoTotal)}\n• Por cobrar: ${fmtMoney(pendiente(p))} → ${fmtMoney(nuevoPend)}`;
+  if(!confirm(msg)) return;
+
+  // Aplicar
+  const montoAnterior = c.monto;
+  c.monto = nuevoMonto;
+  c.saldo = nuevoMonto; // sin pagos parciales, saldo = monto completo
+  if(motivo) c.motivoCambioMonto = motivo;
+  p.total = nuevoTotal;
+
+  saveData();
+  renderAll();
+  cerrarModal('monto');
 }
 
 // ── Modificar condiciones ─────────────────────────────────────────────────────
